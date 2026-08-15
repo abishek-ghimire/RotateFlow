@@ -1,87 +1,49 @@
 # RotateFlow
 
-RotateFlow is a simple and powerful Chrome extension that gives full control over media inside the browser.
-
-We can rotate videos, reposition content, scale media, and fix badly aligned layouts directly on webpages without downloading anything.
-
-The extension is designed to work smoothly on streaming sites, social platforms, PDFs, and local browser files.
-
----
+RotateFlow is a Manifest V3 Chrome extension for rotating, repositioning, and scaling visible media directly on webpages. It works without downloading or modifying the original media.
 
 ## Features
 
-- Rotate videos and images freely
-- Move media horizontally and vertically
-- Scale content from small to large sizes
-- Smooth animation and transitions
-- Anti-cropping protection
-- Smart media targeting
-- Right-click context menu support
-- Works on YouTube, Facebook, WhatsApp Web,PDFs, and more
-- Supports local browser files
-- Dark mode support
-- Lightweight and fast
-- Clean popup UI with sliders
-- Independent settings per browser tab
+The repaired extension provides the following behavior:
 
-
-
-## Supported Platforms
-
-RotateFlow works on most websites including:
-
-- YouTube
-- Facebook
-- WhatsApp Web
-- Local browser media files
-- PDF viewer pages
-
----
-
-## How It Works
-
-RotateFlow applies smooth CSS transformations directly to webpage media elements.
-
-The extension combines:
-
-- Rotation
-- Scaling
-- Position shifting
-
-into a single transformation system while preventing cropping and layout breaking.
-
-It also checks parent containers automatically and removes restrictive overflow rules when needed.
-
----
+- Detects visible videos, images, canvases, iframes, and embedded media.
+- Lets you select a specific media target when a page contains more than one.
+- Applies rotation, scale, horizontal position, and vertical position changes instantly.
+- Keeps transform state independently inside each browser tab and per detected target.
+- Reduces clipping by making nearby restrictive overflow containers visible while a transform is active.
+- Restores the original inline styles and overflow values when a target is reset.
+- Provides left/right 90-degree context-menu actions and a reset action.
+- Includes a light/dark popup theme and accessible labels, status text, and error messages.
 
 ## Installation
 
-### From Chrome Web Store
-Coming soon.
+1. Clone or download this repository.
+2. Open `chrome://extensions` in Chrome.
+3. Enable **Developer mode**.
+4. Click **Load unpacked**.
+5. Select the `RotateFlow` directory.
+6. For local `file://` pages, enable **Allow access to file URLs** on the RotateFlow extension card.
 
-### Manual Installation
+After installation, open a normal webpage containing media and click the RotateFlow toolbar icon. Chrome internal pages such as `chrome://settings` cannot be modified by extensions; the popup reports this as an unavailable page rather than failing silently.
 
-1. Download or clone this repository
-2. Open Google Chrome
-3. Go to:
-   chrome://extensions
-4. Enable **Developer Mode**
-5. Click **Load unpacked**
-6. Select the extension folder
+## Project structure
 
-Done.
-
----
-
-## Project Structure
-
-```bash
+```text
 RotateFlow/
-│
-├── manifest.json
-├── background.js
-├── popup.html
-├── popup.js
-├── content.js
-├── icon-light.png
-└── icon-dark.png
+├── manifest.json       # Manifest V3 permissions and entry points
+├── background.js       # Service worker and context-menu commands
+├── content.js          # Media discovery and CSS transform state
+├── index.html          # Popup markup
+├── script.js           # Popup controls and tab messaging
+├── style.css           # Popup layout and themes
+├── Logo.png            # Extension icon and popup branding
+└── README.md
+```
+
+## Verification
+
+The repository has been checked with JSON validation, JavaScript syntax checks, and a headless Chrome smoke test. The smoke page confirmed that the content script injects stable target identifiers onto both an image and a canvas.
+
+## Notes
+
+Transformations use CSS on the current webpage. A page can still override extension styling through its own scripts, and Chrome’s protected internal pages remain inaccessible by design. On a local file, Chrome’s **Allow access to file URLs** setting is required.

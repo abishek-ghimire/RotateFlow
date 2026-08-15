@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RotateFlow</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app" aria-labelledby="title">
+    <header class="header">
+      <div class="brand">
+        <img src="Logo.png" alt="" class="logo">
+        <div>
+          <h1 id="title">RotateFlow</h1>
+          <p>Control media on this page</p>
+        </div>
+      </div>
+      <button id="themeButton" class="icon-button" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
+    </header>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="error" class="error" role="alert" hidden></div>
+
+    <section class="section target-section" aria-labelledby="target-label">
+      <label id="target-label" for="targetSelect">Media target</label>
+      <select id="targetSelect" disabled>
+        <option value="">Scanning page…</option>
+      </select>
+      <p id="targetMeta" class="hint">Visible video, image, canvas, and embedded media are detected automatically.</p>
+    </section>
+
+    <section class="controls" aria-label="Media controls">
+      <div class="control-row">
+        <div class="control-heading"><label for="rotation">Rotation</label><output id="rotationValue" for="rotation">0°</output></div>
+        <input id="rotation" type="range" min="-360" max="360" step="1" value="0" disabled>
+        <div class="button-row">
+          <button id="rotateLeft" type="button" disabled aria-label="Rotate left 90 degrees">−90°</button>
+          <button id="rotateRight" type="button" disabled aria-label="Rotate right 90 degrees">+90°</button>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-heading"><label for="scale">Scale</label><output id="scaleValue" for="scale">1.0×</output></div>
+        <input id="scale" type="range" min="0.1" max="8" step="0.1" value="1" disabled>
+      </div>
+
+      <div class="control-row">
+        <div class="control-heading"><label for="positionX">Horizontal position</label><output id="positionXValue" for="positionX">0 px</output></div>
+        <input id="positionX" type="range" min="-500" max="500" step="1" value="0" disabled>
+      </div>
+
+      <div class="control-row">
+        <div class="control-heading"><label for="positionY">Vertical position</label><output id="positionYValue" for="positionY">0 px</output></div>
+        <input id="positionY" type="range" min="-500" max="500" step="1" value="0" disabled>
+      </div>
+    </section>
+
+    <section class="actions" aria-label="Reset controls">
+      <button id="centerButton" class="secondary" type="button" disabled>Center</button>
+      <button id="resetButton" class="secondary" type="button" disabled>Reset target</button>
+      <button id="resetAllButton" class="danger" type="button" disabled>Reset all</button>
+    </section>
+
+    <footer>Changes apply instantly and are kept independently for each open tab.</footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
