@@ -3,7 +3,7 @@
   "name": "RotateFlow",
   "version": "1.0.0",
   "description": "Rotate, move, and scale media on any webpage.",
-  "permissions": ["contextMenus", "scripting", "tabs"],
+  "permissions": ["contextMenus"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

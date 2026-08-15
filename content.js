@@ -5,9 +5,9 @@
   const TARGET_SELECTOR = 'video, img, canvas, iframe, object, embed';
   const MAX_POSITION = 5000;
   const states = new Map();
-  const restoredParents = new WeakMap();
   let nextId = 1;
   let activeTargetId = null;
+  let scanFrame = 0;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
 
@@ -270,8 +270,16 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => handleMessage(message, sendResponse));
 
-  const observer = new MutationObserver(() => scanMedia());
+  function scheduleScan() {
+    if (scanFrame) return;
+    scanFrame = window.requestAnimationFrame(() => {
+      scanFrame = 0;
+      scanMedia();
+    });
+  }
+
+  const observer = new MutationObserver(scheduleScan);
   observer.observe(document.documentElement || document, { childList: true, subtree: true });
-  window.addEventListener('resize', scanMedia, { passive: true });
+  window.addEventListener('resize', scheduleScan, { passive: true });
   scanMedia();
 })();
