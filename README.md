@@ -4,9 +4,15 @@ RotateFlow is a Manifest V3 Chrome extension for rotating, repositioning, and sc
 
 ## Features
 
-RotateFlow detects visible videos, images, canvases, iframes, and embedded media. It lets you select a specific target when a page contains more than one media element, then apply rotation, scaling, horizontal movement, and vertical movement instantly. Transform state is maintained independently for each browser tab and detected media target.
-
-The extension also reduces clipping by making nearby restrictive overflow containers visible while a transform is active, restores the original inline styles when a target is reset, provides left/right 90-degree context-menu actions, and includes a light/dark popup theme with accessible labels and error messages.
+- Detects visible videos, images, canvases, iframes, and embedded media.
+- Lets you select a specific target when a page contains multiple media elements.
+- Applies rotation, scaling, horizontal movement, and vertical movement instantly.
+- Maintains transform state independently for each browser tab and detected media target.
+- Reduces clipping by making nearby restrictive overflow containers visible while a transform is active.
+- Restores the original inline styles when a target is reset.
+- Provides left and right 90-degree context-menu actions.
+- Includes a light/dark popup theme.
+- Provides accessible labels and clear error messages.
 
 ## Installation
 
