@@ -5,7 +5,7 @@
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4?style=flat-square&logo=google-chrome)](https://chrome.google.com/webstore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-1.1.0-blue?style=flat-square)](https://github.com/abishekgh-6/RotateFlow/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.0-blue?style=flat-square)](https://github.com/abishek-ghimire/RotateFlow/releases)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-success?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/)
 [![JavaScript](https://img.shields.io/badge/Made%20with-JavaScript-F7DF1E?style=flat-square&logo=javascript)](https://javascript.com)
 
@@ -96,7 +96,7 @@ RotateFlow lets you **transform any media directly in the browser** without modi
 ### 🔧 Option 1: Load Unpacked (Recommended for Development)
 
 1. **Download the extension:**
-   - Go to [GitHub Releases](https://github.com/abishekgh-6/RotateFlow/releases)
+   - Go to [GitHub Releases](https://github.com/abishek-ghimire/RotateFlow/releases)
    - Or: `git clone https://github.com/abishekgh-6/RotateFlow.git`
 
 2. **Open Chrome Extensions page:**
@@ -155,39 +155,6 @@ git pull origin main
    - Click **preset buttons** for quick actions
 5. **Reset** individual media or all transforms with one click
 
-### Popup Panel Guide
-
-```
-┌─────────────────────────────────────┐
-│  RotateFlow       [Dark/Light] [?]  │
-├─────────────────────────────────────┤
-│  Select Media: [Image 1 of 3]   ▼  │
-│  Dimensions: 1920×1080              │
-├─────────────────────────────────────┤
-│  🔍 ZOOM                            │
-│    Slider: [════●════] 100%         │
-│    Input: [100] % [50%] [100%] [200%]
-│                                     │
-│  🔄 ROTATE                          │
-│    Slider: [════●════] 0°           │
-│    Input: [0] °                     │
-│    [90°] [180°] [270°]             │
-│                                     │
-│  📍 PAN (X, Y)                      │
-│    X: [════●════] [Input] px        │
-│    Y: [════●════] [Input] px        │
-│    [↑] [↓] [←] [→] [Center]        │
-│                                     │
-│  🎨 FLIP & FILTERS                  │
-│    [⇄ Flip H] [⇅ Flip V]           │
-│    Brightness: [════●════] 100%    │
-│    Contrast: [════●════] 100%      │
-│                                     │
-│  ☑ Keyboard Shortcuts Enabled       │
-│                                     │
-│  [Reset Zoom] [Reset All]  [Help]  │
-└─────────────────────────────────────┘
-```
 
 ### Direct Interaction (On Page)
 
@@ -594,7 +561,7 @@ A: Yes! RotateFlow is fully local and works offline. No internet connection need
 A: Currently, shortcuts are fixed. Custom remapping is under consideration for future versions.
 
 **Q: How do I report a bug?**
-A: Open an issue on [GitHub Issues](https://github.com/abishekgh-6/RotateFlow/issues) with:
+A: Open an issue on [GitHub Issues](https://github.com/abishek-ghimire/RotateFlow/issues) with:
 - Browser version
 - Steps to reproduce
 - Expected vs actual behavior
@@ -684,7 +651,7 @@ See [LICENSE](LICENSE) file for full text.
 - Discussions: [GitHub Discussions](https://github.com/abishek-ghimire/RotateFlow/discussions)
 
 ### Feedback
-We'd love to hear from you! Please share:
+I'd love to hear from you! Please share:
 - ⭐ Star the repo if you find it useful
 - 💬 Drop feedback in Discussions
 - 🐛 Report bugs in Issues
@@ -742,7 +709,7 @@ We'd love to hear from you! Please share:
 
 - **Current Version:** 1.1.0
 - **Chrome Minimum:** Version 90+
-- **Last Updated:** 2024
+- **Last Updated:** 2026
 - **Status:** ✅ Active & Maintained
 
 ---
