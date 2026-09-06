@@ -8,7 +8,7 @@
 
   function setError(message) { $('error').textContent = message || ''; $('error').hidden = !message; }
   function setStatus(message) { $('status').textContent = message || ''; }
-  function setEnabled(enabled) { [...sliderIds, ...Object.values(inputPairs), ...buttonIds].forEach((id) => { if ($(id)) $(id).disabled = !enabled; }); document.querySelectorAll('.reset-setting').forEach((button) => { button.disabled = !enabled; }); $('targetSelect').disabled = !enabled; }
+  function setEnabled(enabled) { [...sliderIds, ...Object.values(inputPairs), ...buttonIds].forEach((id) => { if ($(id)) $(id).disabled = !enabled; }); document.querySelectorAll('.reset-setting').forEach((button) => { button.disabled = !enabled; }); $('targetPickerButton').disabled = !enabled; if (!enabled) closeTargetPicker(); }
   function sendToTab(message) { return new Promise((resolve, reject) => { if (!activeTabId) return reject(new Error('No active tab is available.')); chrome.tabs.sendMessage(activeTabId, message, (response) => { const error = chrome.runtime.lastError; if (error) return reject(new Error(error.message || 'RotateFlow cannot access this page.')); if (!response) return reject(new Error('The page did not respond. Reload the page and try again.')); resolve(response); }); }); }
   function injectContentScript() { return new Promise((resolve, reject) => { chrome.scripting.executeScript({ target: { tabId: activeTabId, allFrames: false }, files: ['content.js'] }, () => { const error = chrome.runtime.lastError; if (error) reject(new Error(error.message || 'Chrome blocked script access to this page.')); else resolve(); }); }); }
   async function ensureContentScript() { try { const ping = await sendToTab({ type: 'ROTATEFLOW_PING' }); if (ping?.ok) return; } catch (_) {} await injectContentScript(); const ping = await sendToTab({ type: 'ROTATEFLOW_PING' }); if (!ping?.ok) throw new Error('RotateFlow content script did not start on this page.'); }
@@ -24,12 +24,13 @@
     $('qualityNote').textContent = quality;
     updateLabels();
   }
+  function closeTargetPicker() { const menu = $('targetPickerMenu'); if (!menu) return; menu.hidden = true; $('targetPickerButton').setAttribute('aria-expanded', 'false'); }
   function updateTargetList(targets) {
-    const select = $('targetSelect'); select.replaceChildren(); $('targetCount').textContent = targets.length ? `${targets.length} found` : '';
-    targets.forEach((target) => { const option = document.createElement('option'); option.value = target.id; option.textContent = `${target.index}. ${target.type} · ${target.width}×${target.height}`; option.selected = target.id === activeTargetId; select.appendChild(option); });
-    if (!targets.length) { const option = document.createElement('option'); option.textContent = 'No visible media found'; select.appendChild(option); activeTargetId = null; setEnabled(false); $('targetMeta').textContent = 'Open a page containing visible media at least 50×50 pixels.'; return; }
+    const menu = $('targetPickerMenu'); menu.replaceChildren(); $('targetCount').textContent = targets.length ? `${targets.length} found` : '';
+    if (!targets.length) { $('targetPickerLabel').textContent = 'No visible media found'; activeTargetId = null; setEnabled(false); $('targetMeta').textContent = 'Open a page containing visible media at least 50×50 pixels.'; return; }
     if (!targets.some((target) => target.id === activeTargetId)) activeTargetId = targets[0].id;
-    select.value = activeTargetId; const current = targets.find((target) => target.id === activeTargetId); $('targetMeta').textContent = `${current?.type || 'Media'} selected. Shift-drag or Ctrl/Cmd-scroll directly on media.`;
+    targets.forEach((target) => { const option = document.createElement('button'); option.type = 'button'; option.className = 'target-option'; option.dataset.targetId = target.id; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', String(target.id === activeTargetId)); option.textContent = `${target.index}. ${target.type} · ${target.width}×${target.height}`; option.addEventListener('click', () => { closeTargetPicker(); selectTarget(target.id); }); menu.appendChild(option); });
+    const current = targets.find((target) => target.id === activeTargetId); $('targetPickerLabel').textContent = `${current.index}. ${current.type} · ${current.width}×${current.height}`; $('targetMeta').textContent = `${current.type} selected. Shift-drag or Ctrl/Cmd-scroll directly on media.`;
   }
   async function refreshState() { try { await ensureContentScript(); const response = await sendToTab({ type: 'ROTATEFLOW_GET_STATE', targetId: activeTargetId }); if (!response.ok) throw new Error(response.error); initialized = true; activeTargetId = response.activeTargetId; updateTargetList(response.targets || []); setInputs(response.state); if (response.targets?.length) setEnabled(true); setError(''); setStatus(response.targets?.length ? 'Ready.' : 'No media detected.'); } catch (error) { initialized = false; setEnabled(false); setError(pageAccessError(error)); setStatus('Unavailable on this page.'); } }
   async function selectTarget(targetId) { try { const response = await sendToTab({ type: 'ROTATEFLOW_SELECT_TARGET', targetId }); if (!response.ok) throw new Error(response.error); activeTargetId = response.activeTargetId; updateTargetList(response.targets || []); setInputs(response.state); setError(''); setStatus('Target selected.'); } catch (error) { setError(error.message); } }
@@ -53,7 +54,9 @@
   async function resetAll() { if (!confirm('Reset transformations for all visible media?')) return; try { const response = await sendToTab({ type: 'ROTATEFLOW_RESET_ALL' }); if (!response.ok) throw new Error(response.error); updateTargetList(response.targets || []); const current = response.targets?.find((target) => target.id === activeTargetId) || response.targets?.[0]; if (current) setInputs(current); setStatus('All targets reset.'); setError(''); } catch (error) { setError(error.message); } }
   function toggleTheme() { const dark = document.body.classList.toggle('dark'); $('themeButton').setAttribute('aria-pressed', String(dark)); localStorage.setItem('rotateflow-theme', dark ? 'dark' : 'light'); }
   function bind() {
-    $('targetSelect').addEventListener('change', (event) => selectTarget(event.target.value));
+    $('targetPickerButton').addEventListener('click', () => { const menu = $('targetPickerMenu'); const opening = menu.hidden; menu.hidden = !opening; $('targetPickerButton').setAttribute('aria-expanded', String(opening)); if (opening) menu.querySelector('.target-option[aria-selected="true"]')?.focus(); });
+    document.addEventListener('click', (event) => { if (!event.target.closest('.target-picker')) closeTargetPicker(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeTargetPicker(); });
     sliderIds.forEach((id) => $(id).addEventListener('input', queueApply));
     Object.entries(inputPairs).forEach(([sliderId, inputId]) => { const input = $(inputId); input.addEventListener('change', () => applyTypedValue(sliderId)); input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); applyTypedValue(sliderId); input.blur(); } }); });
     document.querySelectorAll('[data-reset]').forEach((button) => button.addEventListener('click', () => resetSetting(button.dataset.reset)));
