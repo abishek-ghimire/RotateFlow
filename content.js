@@ -8,16 +8,15 @@
   let nextId = 1;
   let activeTargetId = null;
   let scanFrame = 0;
+  let keyboardEnabled = true;
+  let pointerDrag = null;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
+  const isInput = (element) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(element?.tagName) || element?.isContentEditable;
 
   function isSupportedElement(element) {
-    return element instanceof HTMLVideoElement
-      || element instanceof HTMLImageElement
-      || element instanceof HTMLCanvasElement
-      || element instanceof HTMLIFrameElement
-      || element instanceof HTMLObjectElement
-      || element instanceof HTMLEmbedElement;
+    return element instanceof HTMLVideoElement || element instanceof HTMLImageElement || element instanceof HTMLCanvasElement
+      || element instanceof HTMLIFrameElement || element instanceof HTMLObjectElement || element instanceof HTMLEmbedElement;
   }
 
   function isVisibleMedia(element) {
@@ -25,7 +24,7 @@
     const style = window.getComputedStyle(element);
     if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
     const rect = element.getBoundingClientRect();
-    return rect.width > 4 && rect.height > 4;
+    return rect.width >= 50 && rect.height >= 50;
   }
 
   function typeFor(element) {
@@ -36,6 +35,10 @@
     return 'Embedded media';
   }
 
+  function sourceFor(element) {
+    return element.currentSrc || element.src || element.data || '';
+  }
+
   function ensureState(element) {
     let id = element.getAttribute(ID_ATTRIBUTE);
     if (!id) {
@@ -44,18 +47,9 @@
     }
     if (!states.has(id)) {
       states.set(id, {
-        id,
-        element,
-        rotation: 0,
-        scale: 1,
-        x: 0,
-        y: 0,
-        original: {
-          transform: element.style.transform,
-          transformOrigin: element.style.transformOrigin,
-          transition: element.style.transition,
-          willChange: element.style.willChange
-        },
+        id, element, zoom: 1, x: 0, y: 0, rotation: 0,
+        flipHorizontal: false, flipVertical: false, brightness: 1, contrast: 1,
+        original: { transform: element.style.transform, transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter },
         parents: []
       });
     }
@@ -63,28 +57,23 @@
   }
 
   function scanMedia() {
-    document.querySelectorAll(TARGET_SELECTOR).forEach((element) => {
-      if (isVisibleMedia(element)) ensureState(element);
-    });
-    for (const [id, state] of states) {
-      if (!state.element.isConnected) states.delete(id);
-    }
+    document.querySelectorAll(TARGET_SELECTOR).forEach((element) => { if (isVisibleMedia(element)) ensureState(element); });
+    for (const [id, state] of states) if (!state.element.isConnected) states.delete(id);
     if (activeTargetId && !states.has(activeTargetId)) activeTargetId = null;
     if (!activeTargetId) activeTargetId = getSortedStates()[0]?.id || null;
   }
 
   function getSortedStates() {
-    return [...states.values()]
-      .filter((state) => isVisibleMedia(state.element))
-      .sort((a, b) => {
-        const aRect = a.element.getBoundingClientRect();
-        const bRect = b.element.getBoundingClientRect();
-        return (bRect.width * bRect.height) - (aRect.width * aRect.height);
-      });
+    return [...states.values()].filter((state) => isVisibleMedia(state.element)).sort((a, b) => {
+      const ar = a.element.getBoundingClientRect(); const br = b.element.getBoundingClientRect();
+      return (br.width * br.height) - (ar.width * ar.height);
+    });
   }
 
   function makeTransform(state) {
-    return `translate3d(${state.x}px, ${state.y}px, 0) rotate(${state.rotation}deg) scale(${state.scale})`;
+    const flipX = state.flipHorizontal ? -1 : 1;
+    const flipY = state.flipVertical ? -1 : 1;
+    return `translate3d(${state.x}px, ${state.y}px, 0) rotate(${state.rotation}deg) scale(${state.zoom}) scaleX(${flipX}) scaleY(${flipY})`;
   }
 
   function makeOverflowSafe(state) {
@@ -93,193 +82,172 @@
     let depth = 0;
     while (parent && depth < 4) {
       const computed = window.getComputedStyle(parent);
-      if (computed.overflow === 'hidden' || computed.overflowX === 'hidden' || computed.overflowY === 'hidden' || computed.overflow === 'clip') {
-        state.parents.push({
-          element: parent,
-          overflow: parent.style.overflow,
-          overflowX: parent.style.overflowX,
-          overflowY: parent.style.overflowY
-        });
-        parent.style.overflow = 'visible';
-        parent.style.overflowX = 'visible';
-        parent.style.overflowY = 'visible';
+      if (['hidden', 'clip'].includes(computed.overflow) || computed.overflowX === 'hidden' || computed.overflowY === 'hidden') {
+        state.parents.push({ element: parent, overflow: parent.style.overflow, overflowX: parent.style.overflowX, overflowY: parent.style.overflowY });
+        parent.style.overflow = 'visible'; parent.style.overflowX = 'visible'; parent.style.overflowY = 'visible';
       }
-      parent = parent.parentElement;
-      depth += 1;
+      parent = parent.parentElement; depth += 1;
     }
   }
 
   function restoreOverflow(state) {
-    for (const parent of state.parents) {
-      parent.element.style.overflow = parent.overflow;
-      parent.element.style.overflowX = parent.overflowX;
-      parent.element.style.overflowY = parent.overflowY;
-    }
+    state.parents.forEach((parent) => { parent.element.style.overflow = parent.overflow; parent.element.style.overflowX = parent.overflowX; parent.element.style.overflowY = parent.overflowY; });
     state.parents = [];
   }
 
   function applyState(state, values = {}, animate = true) {
     if (!state || !state.element.isConnected) return null;
-    state.rotation = clamp(values.rotation ?? state.rotation, -360, 360);
-    state.scale = clamp(values.scale ?? state.scale, 0.1, 8);
+    state.zoom = clamp(values.zoom ?? state.zoom, 0.1, 10);
     state.x = clamp(values.x ?? state.x, -MAX_POSITION, MAX_POSITION);
     state.y = clamp(values.y ?? state.y, -MAX_POSITION, MAX_POSITION);
+    state.rotation = clamp(values.rotation ?? state.rotation, -3600, 3600);
+    state.flipHorizontal = Boolean(values.flipHorizontal ?? state.flipHorizontal);
+    state.flipVertical = Boolean(values.flipVertical ?? state.flipVertical);
+    state.brightness = clamp(values.brightness ?? state.brightness, 0.5, 1.5);
+    state.contrast = clamp(values.contrast ?? state.contrast, 0.5, 1.5);
     makeOverflowSafe(state);
-
     state.element.style.transformOrigin = 'center center';
-    state.element.style.willChange = 'transform';
-    state.element.style.transition = animate ? 'transform 160ms ease-out' : 'none';
+    state.element.style.willChange = 'transform, filter';
+    state.element.style.transition = animate ? 'transform 200ms ease-out, filter 200ms ease-out' : 'none';
     state.element.style.transform = makeTransform(state);
+    state.element.style.filter = `brightness(${state.brightness}) contrast(${state.contrast})`;
     activeTargetId = state.id;
     return serializeState(state);
   }
 
   function resetState(state) {
     if (!state || !state.element.isConnected) return null;
-    state.rotation = 0;
-    state.scale = 1;
-    state.x = 0;
-    state.y = 0;
-    state.element.style.transform = state.original.transform;
-    state.element.style.transformOrigin = state.original.transformOrigin;
-    state.element.style.transition = state.original.transition;
-    state.element.style.willChange = state.original.willChange;
+    Object.assign(state, { zoom: 1, x: 0, y: 0, rotation: 0, flipHorizontal: false, flipVertical: false, brightness: 1, contrast: 1 });
+    Object.assign(state.element.style, { transform: state.original.transform, transformOrigin: state.original.transformOrigin, transition: state.original.transition, willChange: state.original.willChange, filter: state.original.filter });
     restoreOverflow(state);
     return serializeState(state);
   }
 
   function serializeState(state) {
-    return {
-      id: state.id,
-      type: typeFor(state.element),
-      rotation: state.rotation,
-      scale: state.scale,
-      x: state.x,
-      y: state.y
-    };
+    const rect = state.element.getBoundingClientRect();
+    return { id: state.id, type: typeFor(state.element), zoom: state.zoom, rotation: state.rotation, x: state.x, y: state.y,
+      flipHorizontal: state.flipHorizontal, flipVertical: state.flipVertical, brightness: state.brightness, contrast: state.contrast,
+      width: Math.round(rect.width), height: Math.round(rect.height), source: sourceFor(state.element), naturalWidth: state.element.naturalWidth || 0, naturalHeight: state.element.naturalHeight || 0 };
   }
 
   function getTargetSummaries() {
     scanMedia();
-    return getSortedStates().map((state, index) => {
-      const rect = state.element.getBoundingClientRect();
-      return {
-        ...serializeState(state),
-        index: index + 1,
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-        active: state.id === activeTargetId
-      };
-    });
+    return getSortedStates().map((state, index) => ({ ...serializeState(state), index: index + 1, active: state.id === activeTargetId }));
   }
 
   function resolveTarget(targetId) {
     scanMedia();
     const requested = targetId ? states.get(String(targetId)) : null;
     if (requested && isVisibleMedia(requested.element)) return requested;
-
-    // Context menus expose the clicked element's regular DOM id. Map it to
-    // RotateFlow state when the page provides one.
-    const hintedElement = targetId ? document.getElementById(String(targetId)) : null;
-    if (hintedElement && isVisibleMedia(hintedElement)) return ensureState(hintedElement);
-
+    const hinted = targetId ? document.getElementById(String(targetId)) : null;
+    if (hinted && isVisibleMedia(hinted)) return ensureState(hinted);
     return states.get(activeTargetId) || getSortedStates()[0] || null;
   }
 
-  function rotateBy(degrees, targetId) {
-    const state = resolveTarget(targetId);
-    if (!state) return null;
-    return applyState(state, { rotation: state.rotation + degrees });
+  function zoomAtPoint(state, delta, clientX, clientY) {
+    const rect = state.element.getBoundingClientRect();
+    const oldZoom = state.zoom; const nextZoom = clamp(oldZoom + delta, 0.1, 10);
+    const mx = clientX - (rect.left + rect.width / 2); const my = clientY - (rect.top + rect.height / 2);
+    applyState(state, { zoom: nextZoom, x: state.x + (mx * (oldZoom - nextZoom)) / nextZoom, y: state.y + (my * (oldZoom - nextZoom)) / nextZoom });
+  }
+
+  function handleMediaClick(event) {
+    const state = ensureState(event.currentTarget); activeTargetId = state.id;
+    if (event.detail === 2) { event.preventDefault(); zoomAtPoint(state, 0.25, event.clientX, event.clientY); }
+  }
+
+  function handleWheel(event) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault(); zoomAtPoint(ensureState(event.currentTarget), event.deltaY < 0 ? 0.1 : -0.1, event.clientX, event.clientY);
+  }
+
+  function handlePointerDown(event) {
+    if (!(event.shiftKey || event.button === 1)) return;
+    const state = ensureState(event.currentTarget); activeTargetId = state.id; pointerDrag = { state, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture?.(event.pointerId); event.preventDefault();
+  }
+
+  function handlePointerMove(event) {
+    if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+    const { state } = pointerDrag; const dx = event.clientX - pointerDrag.x; const dy = event.clientY - pointerDrag.y;
+    pointerDrag.x = event.clientX; pointerDrag.y = event.clientY; applyState(state, { x: state.x + dx, y: state.y + dy }, false); event.preventDefault();
+  }
+
+  function endPointerDrag() { pointerDrag = null; }
+
+  function attachInteractions(state) {
+    if (state.element.dataset.rotateflowBound) return;
+    state.element.dataset.rotateflowBound = 'true';
+    state.element.addEventListener('click', handleMediaClick, true);
+    state.element.addEventListener('wheel', handleWheel, { passive: false });
+    state.element.addEventListener('pointerdown', handlePointerDown, true);
+    state.element.addEventListener('pointermove', handlePointerMove, true);
+    state.element.addEventListener('pointerup', endPointerDrag, true);
+    state.element.addEventListener('pointercancel', endPointerDrag, true);
+  }
+
+  function command(command) {
+    const state = resolveTarget(); if (!state) return null;
+    if (command === 'rotate-left') return applyState(state, { rotation: state.rotation - 90 });
+    if (command === 'rotate-right') return applyState(state, { rotation: state.rotation + 90 });
+    if (command === 'zoom-in') return applyState(state, { zoom: state.zoom + 0.1 });
+    if (command === 'zoom-out') return applyState(state, { zoom: state.zoom - 0.1 });
+    if (command === 'flip-horizontal') return applyState(state, { flipHorizontal: !state.flipHorizontal });
+    if (command === 'flip-vertical') return applyState(state, { flipVertical: !state.flipVertical });
+    if (command === 'reset') return resetState(state);
+    return null;
+  }
+
+  function handleKeydown(event) {
+    if (!keyboardEnabled || isInput(event.target)) return;
+    const key = event.key; const state = resolveTarget(); if (!state) return;
+    const values = {};
+    if (key === '+' || key === '=') values.zoom = state.zoom + 0.1;
+    else if (key === '-' || key === '_') values.zoom = state.zoom - 0.1;
+    else if (key === '0') values.zoom = 1;
+    else if (key.toLowerCase() === 'r') values.rotation = state.rotation + (event.shiftKey ? -15 : 15);
+    else if (key.toLowerCase() === 'h') values.flipHorizontal = !state.flipHorizontal;
+    else if (key.toLowerCase() === 'v') values.flipVertical = !state.flipVertical;
+    else if (key === 'ArrowUp' || key.toLowerCase() === 'w') values.y = state.y - 10;
+    else if (key === 'ArrowDown' || key.toLowerCase() === 's') values.y = state.y + 10;
+    else if (key === 'ArrowLeft' || key.toLowerCase() === 'a') values.x = state.x - 10;
+    else if (key === 'ArrowRight' || key.toLowerCase() === 'd') values.x = state.x + 10;
+    else if (key === 'Backspace') { event.preventDefault(); resetState(state); return; }
+    else if (key === 'Escape') { activeTargetId = null; return; }
+    else return;
+    event.preventDefault(); applyState(state, values);
   }
 
   function handleMessage(message, sendResponse) {
     if (!message || typeof message.type !== 'string') return false;
     scanMedia();
-
-    if (message.type === 'ROTATEFLOW_PING') {
-      sendResponse({ ok: true, supported: true });
-      return false;
-    }
-
-    if (message.type === 'ROTATEFLOW_GET_STATE') {
-      const current = resolveTarget(message.targetId);
-      sendResponse({
-        ok: true,
-        targets: getTargetSummaries(),
-        activeTargetId: current?.id || null,
-        state: current ? serializeState(current) : null
-      });
-      return false;
-    }
-
-    if (message.type === 'ROTATEFLOW_SELECT_TARGET') {
-      const state = resolveTarget(message.targetId);
-      if (!state) {
-        sendResponse({ ok: false, error: 'No visible media was found on this page.' });
-        return false;
-      }
-      activeTargetId = state.id;
-      sendResponse({ ok: true, activeTargetId, state: serializeState(state), targets: getTargetSummaries() });
-      return false;
-    }
-
-    if (message.type === 'ROTATEFLOW_APPLY') {
-      const state = resolveTarget(message.targetId);
-      if (!state) {
-        sendResponse({ ok: false, error: 'No visible media was found on this page.' });
-        return false;
-      }
-      sendResponse({ ok: true, state: applyState(state, message.values || {}, message.animate !== false) });
-      return false;
-    }
-
-    if (message.type === 'ROTATEFLOW_RESET') {
-      const state = resolveTarget(message.targetId);
-      if (!state) {
-        sendResponse({ ok: false, error: 'No visible media was found on this page.' });
-        return false;
-      }
-      sendResponse({ ok: true, state: resetState(state) });
-      return false;
-    }
-
-    if (message.type === 'ROTATEFLOW_RESET_ALL') {
-      states.forEach(resetState);
-      sendResponse({ ok: true, targets: getTargetSummaries() });
-      return false;
-    }
-
+    if (message.type === 'ROTATEFLOW_PING') { sendResponse({ ok: true, supported: true }); return false; }
+    if (message.type === 'ROTATEFLOW_SET_SETTINGS') { keyboardEnabled = message.keyboardEnabled !== false; sendResponse({ ok: true }); return false; }
+    if (message.type === 'ROTATEFLOW_GET_STATE') { const current = resolveTarget(message.targetId); sendResponse({ ok: true, targets: getTargetSummaries(), activeTargetId: current?.id || null, state: current ? serializeState(current) : null }); return false; }
+    if (message.type === 'ROTATEFLOW_SELECT_TARGET') { const state = resolveTarget(message.targetId); if (!state) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; } activeTargetId = state.id; sendResponse({ ok: true, activeTargetId, state: serializeState(state), targets: getTargetSummaries() }); return false; }
+    if (message.type === 'ROTATEFLOW_APPLY') { const state = resolveTarget(message.targetId); if (!state) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; } sendResponse({ ok: true, state: applyState(state, message.values || {}, message.animate !== false) }); return false; }
+    if (message.type === 'ROTATEFLOW_RESET') { const state = resolveTarget(message.targetId); if (!state) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; } sendResponse({ ok: true, state: resetState(state) }); return false; }
+    if (message.type === 'ROTATEFLOW_RESET_ALL') { states.forEach(resetState); sendResponse({ ok: true, targets: getTargetSummaries() }); return false; }
     if (message.type === 'ROTATEFLOW_COMMAND') {
-      if (message.command === 'rotate-left') {
-        const state = rotateBy(-90, message.targetHint || null);
-        sendResponse({ ok: Boolean(state), state });
-      } else if (message.command === 'rotate-right') {
-        const state = rotateBy(90, message.targetHint || null);
-        sendResponse({ ok: Boolean(state), state });
-      } else if (message.command === 'reset') {
-        const state = resolveTarget(message.targetHint || null);
-        sendResponse({ ok: Boolean(state), state: state ? resetState(state) : null });
-      } else {
-        sendResponse({ ok: false, error: 'Unknown RotateFlow command.' });
-      }
+      const target = resolveTarget(message.targetHint || null);
+      if (!target) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; }
+      let result = null;
+      if (message.command === 'rotate-left') result = applyState(target, { rotation: target.rotation - 90 });
+      else if (message.command === 'rotate-right') result = applyState(target, { rotation: target.rotation + 90 });
+      else if (message.command === 'reset') result = resetState(target);
+      else result = command(message.command);
+      sendResponse({ ok: Boolean(result), state: result });
       return false;
     }
-
     return false;
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => handleMessage(message, sendResponse));
+  chrome.storage?.local.get({ keyboardEnabled: true }, (settings) => { keyboardEnabled = settings.keyboardEnabled !== false; });
+  window.addEventListener('keydown', handleKeydown, true);
 
-  function scheduleScan() {
-    if (scanFrame) return;
-    scanFrame = window.requestAnimationFrame(() => {
-      scanFrame = 0;
-      scanMedia();
-    });
-  }
-
-  const observer = new MutationObserver(scheduleScan);
-  observer.observe(document.documentElement || document, { childList: true, subtree: true });
-  window.addEventListener('resize', scheduleScan, { passive: true });
-  scanMedia();
+  function scheduleScan() { if (scanFrame) return; scanFrame = requestAnimationFrame(() => { scanFrame = 0; scanMedia(); states.forEach(attachInteractions); }); }
+  new MutationObserver(scheduleScan).observe(document.documentElement || document, { childList: true, subtree: true });
+  window.addEventListener('resize', scheduleScan, { passive: true }); window.addEventListener('pageshow', scheduleScan, { passive: true });
+  scanMedia(); states.forEach(attachInteractions);
 })();

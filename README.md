@@ -69,3 +69,16 @@ The extension has been checked with manifest validation, JavaScript syntax check
 
 [1]: https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world "Chrome Extensions: Hello World tutorial"
 [2]: https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns "Chrome Extensions: Match patterns"
+
+
+## Version 1.1.0 changes
+
+RotateFlow now supports a broader, focused set of display-only transformations. The popup includes zoom from 10% to 1000%, direct numeric inputs, pan controls, rotation presets, horizontal and vertical flips, brightness and contrast filters, per-media selection, media dimensions and quality feedback, reset-zoom, per-target reset, and reset-all actions. Direct interaction is also supported on media: Ctrl/Cmd-scroll zooms toward the pointer, double-click zooms toward the pointer, and Shift-drag or middle-button drag pans the selected media.
+
+Keyboard shortcuts can be enabled or disabled and are persisted with `chrome.storage.local`. When enabled, `+`, `-`, `0`, `R`, `Shift+R`, `H`, `V`, arrow keys, and `W/A/S/D` provide the core transform actions. The extension ignores shortcuts while the user is typing in a form field. The existing context-menu actions remain available for rotate-left, rotate-right, and reset.
+
+The implementation intentionally leaves out low-value or invasive requirements from the draft specification, including an always-on in-page floating panel, global browser shortcuts, custom shortcut remapping, file-size/network inspection, automatic downloads, source rewriting, and website-specific integrations. Keeping the browser-action popup as the single control surface avoids permanently covering page content and keeps the extension local-only and lightweight.
+
+## Verification
+
+The updated source passes JavaScript syntax checks for all scripts, JSON validation for the Manifest V3 configuration, and whitespace checks with `git diff --check`.
