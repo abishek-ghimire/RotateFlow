@@ -2,13 +2,13 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const sliderIds = ['zoom', 'positionX', 'positionY', 'rotation', 'brightness', 'contrast'];
-  const inputPairs = { zoom: 'zoomInput', positionX: 'positionXInput', positionY: 'positionYInput', rotation: 'rotationInput' };
-  const buttonIds = ['zoomOut', 'zoomIn', 'centerButton', 'resetZoom', 'rotateLeft', 'rotateRight', 'rotate45', 'rotate180', 'flipH', 'flipV', 'resetButton', 'resetAllButton'];
+  const inputPairs = { zoom: 'zoomInput', positionX: 'positionXInput', positionY: 'positionYInput', rotation: 'rotationInput', brightness: 'brightnessInput', contrast: 'contrastInput' };
+  const buttonIds = ['zoomOut', 'zoomIn', 'centerButton', 'rotateLeft', 'rotateRight', 'rotate45', 'rotate180', 'flipH', 'flipV', 'resetButton', 'resetAllButton'];
   let activeTabId = null, activeTargetId = null, applyTimer = null, initialized = false;
 
   function setError(message) { $('error').textContent = message || ''; $('error').hidden = !message; }
   function setStatus(message) { $('status').textContent = message || ''; }
-  function setEnabled(enabled) { [...sliderIds, ...Object.values(inputPairs), ...buttonIds].forEach((id) => { if ($(id)) $(id).disabled = !enabled; }); $('targetSelect').disabled = !enabled; }
+  function setEnabled(enabled) { [...sliderIds, ...Object.values(inputPairs), ...buttonIds].forEach((id) => { if ($(id)) $(id).disabled = !enabled; }); document.querySelectorAll('.reset-setting').forEach((button) => { button.disabled = !enabled; }); $('targetSelect').disabled = !enabled; }
   function sendToTab(message) { return new Promise((resolve, reject) => { if (!activeTabId) return reject(new Error('No active tab is available.')); chrome.tabs.sendMessage(activeTabId, message, (response) => { const error = chrome.runtime.lastError; if (error) return reject(new Error(error.message || 'RotateFlow cannot access this page.')); if (!response) return reject(new Error('The page did not respond. Reload the page and try again.')); resolve(response); }); }); }
   function injectContentScript() { return new Promise((resolve, reject) => { chrome.scripting.executeScript({ target: { tabId: activeTabId, allFrames: false }, files: ['content.js'] }, () => { const error = chrome.runtime.lastError; if (error) reject(new Error(error.message || 'Chrome blocked script access to this page.')); else resolve(); }); }); }
   async function ensureContentScript() { try { const ping = await sendToTab({ type: 'ROTATEFLOW_PING' }); if (ping?.ok) return; } catch (_) {} await injectContentScript(); const ping = await sendToTab({ type: 'ROTATEFLOW_PING' }); if (!ping?.ok) throw new Error('RotateFlow content script did not start on this page.'); }
@@ -36,15 +36,29 @@
   async function applyValues(extra = {}) { if (!activeTargetId || !initialized) return; try { const response = await sendToTab({ type: 'ROTATEFLOW_APPLY', targetId: activeTargetId, values: { ...stateValues(), ...extra } }); if (!response.ok) throw new Error(response.error); setInputs(response.state); setError(''); setStatus('Applied.'); } catch (error) { setError(error.message); } }
   function queueApply() { updateLabels(); clearTimeout(applyTimer); applyTimer = setTimeout(() => applyValues(), 45); }
   function setControlValue(id, value) { const inputId = inputPairs[id]; $(id).value = value; if (inputId) $(inputId).value = value; queueApply(); }
+  function resetSetting(setting) {
+    const defaults = { zoom: 100, positionX: 0, positionY: 0, rotation: 0, brightness: 100, contrast: 100 };
+    if (Object.prototype.hasOwnProperty.call(defaults, setting)) setControlValue(setting, defaults[setting]);
+    else if (setting === 'flipHorizontal') applyValues({ flipHorizontal: false });
+    else if (setting === 'flipVertical') applyValues({ flipVertical: false });
+  }
+  function applyTypedValue(sliderId) {
+    const input = $(inputPairs[sliderId]);
+    const slider = $(sliderId);
+    const raw = Number(input.value);
+    const value = Number.isFinite(raw) ? Math.max(Number(slider.min), Math.min(Number(slider.max), raw)) : Number(slider.value);
+    setControlValue(sliderId, value);
+  }
   async function resetTarget() { try { const response = await sendToTab({ type: 'ROTATEFLOW_RESET', targetId: activeTargetId }); if (!response.ok) throw new Error(response.error); setInputs(response.state); setStatus('Target reset.'); setError(''); } catch (error) { setError(error.message); } }
   async function resetAll() { if (!confirm('Reset transformations for all visible media?')) return; try { const response = await sendToTab({ type: 'ROTATEFLOW_RESET_ALL' }); if (!response.ok) throw new Error(response.error); updateTargetList(response.targets || []); const current = response.targets?.find((target) => target.id === activeTargetId) || response.targets?.[0]; if (current) setInputs(current); setStatus('All targets reset.'); setError(''); } catch (error) { setError(error.message); } }
   function toggleTheme() { const dark = document.body.classList.toggle('dark'); $('themeButton').setAttribute('aria-pressed', String(dark)); localStorage.setItem('rotateflow-theme', dark ? 'dark' : 'light'); }
   function bind() {
     $('targetSelect').addEventListener('change', (event) => selectTarget(event.target.value));
     sliderIds.forEach((id) => $(id).addEventListener('input', queueApply));
-    Object.entries(inputPairs).forEach(([sliderId, inputId]) => { $(inputId).addEventListener('change', () => { const value = Math.max(Number($(inputId).min), Math.min(Number($(inputId).max), Number($(inputId).value))); setControlValue(sliderId, value); }); });
+    Object.entries(inputPairs).forEach(([sliderId, inputId]) => { const input = $(inputId); input.addEventListener('change', () => applyTypedValue(sliderId)); input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); applyTypedValue(sliderId); input.blur(); } }); });
+    document.querySelectorAll('[data-reset]').forEach((button) => button.addEventListener('click', () => resetSetting(button.dataset.reset)));
     $('zoomOut').addEventListener('click', () => setControlValue('zoom', Math.max(10, Number($('zoom').value) - 10))); $('zoomIn').addEventListener('click', () => setControlValue('zoom', Math.min(1000, Number($('zoom').value) + 10)));
-    $('centerButton').addEventListener('click', () => { $('positionX').value = '0'; $('positionY').value = '0'; queueApply(); }); $('resetZoom').addEventListener('click', () => setControlValue('zoom', 100));
+    $('centerButton').addEventListener('click', () => { $('positionX').value = '0'; $('positionXInput').value = '0'; $('positionY').value = '0'; $('positionYInput').value = '0'; queueApply(); });
     $('rotateLeft').addEventListener('click', () => setControlValue('rotation', Number($('rotation').value) - 15)); $('rotateRight').addEventListener('click', () => setControlValue('rotation', Number($('rotation').value) + 15)); $('rotate45').addEventListener('click', () => setControlValue('rotation', 45)); $('rotate180').addEventListener('click', () => setControlValue('rotation', 180));
     $('flipH').addEventListener('click', () => applyValues({ flipHorizontal: !$('flipH').classList.contains('active') })); $('flipV').addEventListener('click', () => applyValues({ flipVertical: !$('flipV').classList.contains('active') }));
     $('resetButton').addEventListener('click', resetTarget); $('resetAllButton').addEventListener('click', resetAll); $('themeButton').addEventListener('click', toggleTheme);
