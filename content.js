@@ -49,7 +49,7 @@
       states.set(id, {
         id, element, zoom: 1, x: 0, y: 0, rotation: 0,
         flipHorizontal: false, flipVertical: false, brightness: 1, contrast: 1,
-        original: { transform: element.style.transform, transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter },
+        original: { transform: element.style.transform, transformPriority: element.style.getPropertyPriority('transform'), transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter, filterPriority: element.style.getPropertyPriority('filter') },
         parents: []
       });
     }
@@ -75,6 +75,10 @@
     const flipY = state.flipVertical ? -1 : 1;
     return `translate3d(${state.x}px, ${state.y}px, 0) rotate(${state.rotation}deg) scale(${state.zoom}) scaleX(${flipX}) scaleY(${flipY})`;
   }
+
+  function fullscreenElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function isFullscreenMedia(element) { const full = fullscreenElement(); return Boolean(full && (full === element || full.contains(element))); }
+  function hasTransform(state) { return state.zoom !== 1 || state.x !== 0 || state.y !== 0 || state.rotation !== 0 || state.flipHorizontal || state.flipVertical || state.brightness !== 1 || state.contrast !== 1; }
 
   function makeOverflowSafe(state) {
     if (state.parents.length) return;
@@ -106,11 +110,11 @@
     state.brightness = clamp(values.brightness ?? state.brightness, 0.5, 1.5);
     state.contrast = clamp(values.contrast ?? state.contrast, 0.5, 1.5);
     makeOverflowSafe(state);
-    state.element.style.transformOrigin = 'center center';
-    state.element.style.willChange = 'transform, filter';
-    state.element.style.transition = animate ? 'transform 200ms ease-out, filter 200ms ease-out' : 'none';
-    state.element.style.transform = makeTransform(state);
-    state.element.style.filter = `brightness(${state.brightness}) contrast(${state.contrast})`;
+    state.element.style.setProperty('transform-origin', 'center center', 'important');
+    state.element.style.setProperty('will-change', 'transform, filter');
+    state.element.style.setProperty('transition', animate ? 'transform 200ms ease-out, filter 200ms ease-out' : 'none');
+    state.element.style.setProperty('transform', makeTransform(state), 'important');
+    state.element.style.setProperty('filter', `brightness(${state.brightness}) contrast(${state.contrast})`, 'important');
     activeTargetId = state.id;
     return serializeState(state);
   }
@@ -118,7 +122,11 @@
   function resetState(state) {
     if (!state || !state.element.isConnected) return null;
     Object.assign(state, { zoom: 1, x: 0, y: 0, rotation: 0, flipHorizontal: false, flipVertical: false, brightness: 1, contrast: 1 });
-    Object.assign(state.element.style, { transform: state.original.transform, transformOrigin: state.original.transformOrigin, transition: state.original.transition, willChange: state.original.willChange, filter: state.original.filter });
+    state.element.style.setProperty('transform', state.original.transform, state.original.transformPriority || '');
+    state.element.style.setProperty('transform-origin', state.original.transformOrigin, '');
+    state.element.style.setProperty('transition', state.original.transition, '');
+    state.element.style.setProperty('will-change', state.original.willChange, '');
+    state.element.style.setProperty('filter', state.original.filter, state.original.filterPriority || '');
     restoreOverflow(state);
     return serializeState(state);
   }
@@ -248,6 +256,16 @@
 
   function scheduleScan() { if (scanFrame) return; scanFrame = requestAnimationFrame(() => { scanFrame = 0; scanMedia(); states.forEach(attachInteractions); }); }
   new MutationObserver(scheduleScan).observe(document.documentElement || document, { childList: true, subtree: true });
+  function handleFullscreenChange() {
+    const full = fullscreenElement();
+    if (full) {
+      const target = [...states.values()].find((state) => state.element === full || full.contains(state.element));
+      if (target) { activeTargetId = target.id; attachInteractions(target); if (hasTransform(target)) applyState(target, {}, false); }
+    }
+    scheduleScan();
+  }
   window.addEventListener('resize', scheduleScan, { passive: true }); window.addEventListener('pageshow', scheduleScan, { passive: true });
+  document.addEventListener('fullscreenchange', handleFullscreenChange, true);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange, true);
   scanMedia(); states.forEach(attachInteractions);
 })();
