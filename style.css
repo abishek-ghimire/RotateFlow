@@ -26,7 +26,7 @@ select, input[type=number] { width: 100%; border: 1px solid var(--border); borde
 .target-option:hover:not(:disabled), .target-option:focus-visible { background: var(--accent-soft); transform: none; }
 .control-row { padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); } .control-row:last-child { border-bottom: 0; }
 .control-heading { justify-content: space-between; gap: 7px; margin-bottom: 4px; } output { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 650; margin-left: auto; } .reset-setting { min-height: 23px; padding: 2px 7px; font-size: 11px; }
-input[type=range] { width: 100%; accent-color: var(--accent); } .inline { gap: 5px; } .inline input { flex: 1; } .number-input { width: 82px; margin-top: 5px; }
+input[type=range] { width: 100%; accent-color: var(--accent); } .inline { gap: 5px; } .inline input { flex: 1; } .value-entry { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--muted); font-size: 11px; } .value-entry label { font-weight: 600; white-space: nowrap; } .value-entry .number-input { width: 92px; margin-top: 0; } .value-entry span { min-width: 18px; } .number-input { width: 82px; margin-top: 5px; }
 .button-row { gap: 6px; flex-wrap: wrap; margin-top: 7px; } .button-row button { flex: 1; } .button-row.compact button { min-width: 62px; font-size: 11px; }
 .secondary { background: var(--accent-soft); } .danger { color: var(--danger); } details summary { cursor: pointer; font-weight: 650; padding: 7px 0; }
 .toggle { display: flex; gap: 8px; align-items: center; font-weight: 600; } .toggle input { accent-color: var(--accent); } footer { text-align: center; padding: 8px 2px 0; }
