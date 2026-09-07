@@ -10,6 +10,8 @@
   let scanFrame = 0;
   let keyboardEnabled = true;
   let pointerDrag = null;
+  let pendingVideoState = null;
+  let fullscreenRecoveryTimer = 0;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
   const isInput = (element) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(element?.tagName) || element?.isContentEditable;
@@ -39,6 +41,8 @@
     return element.currentSrc || element.src || element.data || '';
   }
 
+  function isYouTubePage() { return /(^|\.)youtube\.com$|(^|\.)youtube-nocookie\.com$|(^|\.)youtu\.be$/.test(location.hostname); }
+
   function ensureState(element) {
     let id = element.getAttribute(ID_ATTRIBUTE);
     if (!id) {
@@ -46,19 +50,27 @@
       element.setAttribute(ID_ATTRIBUTE, id);
     }
     if (!states.has(id)) {
-      states.set(id, {
-        id, element, zoom: 1, x: 0, y: 0, rotation: 0,
-        flipHorizontal: false, flipVertical: false, brightness: 1, contrast: 1,
+      const restored = element instanceof HTMLVideoElement && pendingVideoState ? pendingVideoState : null;
+      const state = {
+        id, element, zoom: restored?.zoom ?? 1, x: restored?.x ?? 0, y: restored?.y ?? 0, rotation: restored?.rotation ?? 0,
+        flipHorizontal: restored?.flipHorizontal ?? false, flipVertical: restored?.flipVertical ?? false, brightness: restored?.brightness ?? 1, contrast: restored?.contrast ?? 1,
         original: { transform: element.style.transform, transformPriority: element.style.getPropertyPriority('transform'), transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter, filterPriority: element.style.getPropertyPriority('filter') },
         parents: []
-      });
+      };
+      states.set(id, state);
+      if (restored) { pendingVideoState = null; if (hasTransform(state)) { applyState(state, {}, false); if (isFullscreenMedia(state.element)) scheduleFullscreenRecovery(state); } }
     }
     return states.get(id);
   }
 
   function scanMedia() {
+    for (const [id, state] of states) {
+      if (!state.element.isConnected) {
+        if (isYouTubePage() && state.element instanceof HTMLVideoElement && hasTransform(state)) pendingVideoState = { zoom: state.zoom, x: state.x, y: state.y, rotation: state.rotation, flipHorizontal: state.flipHorizontal, flipVertical: state.flipVertical, brightness: state.brightness, contrast: state.contrast };
+        states.delete(id);
+      }
+    }
     document.querySelectorAll(TARGET_SELECTOR).forEach((element) => { if (isVisibleMedia(element)) ensureState(element); });
-    for (const [id, state] of states) if (!state.element.isConnected) states.delete(id);
     if (activeTargetId && !states.has(activeTargetId)) activeTargetId = null;
     if (!activeTargetId) activeTargetId = getSortedStates()[0]?.id || null;
   }
@@ -255,12 +267,42 @@
   window.addEventListener('keydown', handleKeydown, true);
 
   function scheduleScan() { if (scanFrame) return; scanFrame = requestAnimationFrame(() => { scanFrame = 0; scanMedia(); states.forEach(attachInteractions); }); }
-  new MutationObserver(scheduleScan).observe(document.documentElement || document, { childList: true, subtree: true });
+  const observer = new MutationObserver((records) => {
+    let needsScan = false;
+    records.forEach((record) => {
+      if (record.type === 'childList') needsScan = true;
+      if (record.type === 'attributes') {
+        const state = [...states.values()].find((candidate) => candidate.element === record.target);
+        if (state && isFullscreenMedia(state.element)) reapplyIfChanged(state);
+      }
+    });
+    if (needsScan) scheduleScan();
+  });
+  observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+  function reapplyIfChanged(state) {
+    if (!state || !state.element.isConnected || !hasTransform(state)) return;
+    const expectedTransform = makeTransform(state);
+    const expectedFilter = `brightness(${state.brightness}) contrast(${state.contrast})`;
+    if (state.element.style.getPropertyValue('transform') !== expectedTransform || state.element.style.getPropertyValue('filter') !== expectedFilter) applyState(state, {}, false);
+  }
+
+  function scheduleFullscreenRecovery(state) {
+    window.clearTimeout(fullscreenRecoveryTimer);
+    let attempts = 0;
+    const recover = () => {
+      if (!fullscreenElement() || !state?.element?.isConnected) return;
+      reapplyIfChanged(state);
+      attempts += 1;
+      if (attempts < 24) fullscreenRecoveryTimer = window.setTimeout(recover, 125);
+    };
+    recover();
+  }
+
   function handleFullscreenChange() {
     const full = fullscreenElement();
     if (full) {
       const target = [...states.values()].find((state) => state.element === full || full.contains(state.element));
-      if (target) { activeTargetId = target.id; attachInteractions(target); if (hasTransform(target)) applyState(target, {}, false); }
+      if (target) { activeTargetId = target.id; attachInteractions(target); if (hasTransform(target)) { applyState(target, {}, false); scheduleFullscreenRecovery(target); } }
     }
     scheduleScan();
   }
