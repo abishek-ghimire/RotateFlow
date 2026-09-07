@@ -53,6 +53,7 @@
   async function resetTarget() { try { const response = await sendToTab({ type: 'ROTATEFLOW_RESET', targetId: activeTargetId }); if (!response.ok) throw new Error(response.error); setInputs(response.state); setStatus('Target reset.'); setError(''); } catch (error) { setError(error.message); } }
   async function resetAll() { if (!confirm('Reset transformations for all visible media?')) return; try { const response = await sendToTab({ type: 'ROTATEFLOW_RESET_ALL' }); if (!response.ok) throw new Error(response.error); updateTargetList(response.targets || []); const current = response.targets?.find((target) => target.id === activeTargetId) || response.targets?.[0]; if (current) setInputs(current); setStatus('All targets reset.'); setError(''); } catch (error) { setError(error.message); } }
   function toggleTheme() { const dark = document.body.classList.toggle('dark'); $('themeButton').setAttribute('aria-pressed', String(dark)); localStorage.setItem('rotateflow-theme', dark ? 'dark' : 'light'); }
+  function setKeyboardUi(enabled) { $('keyboardToggle').checked = enabled; $('keyboardBadge').textContent = enabled ? 'ON' : 'OFF'; $('keyboardBadge').classList.toggle('off', !enabled); $('keyboardStatus').textContent = enabled ? 'Enabled · Press O anytime to toggle shortcuts. R rotate, H/V flip, +/- zoom, arrows pan.' : 'Disabled · Press O to enable again, or use the controls and direct media gestures.'; }
   function bind() {
     $('targetPickerButton').addEventListener('click', () => { const menu = $('targetPickerMenu'); const opening = menu.hidden; menu.hidden = !opening; $('targetPickerButton').setAttribute('aria-expanded', String(opening)); if (opening) menu.querySelector('.target-option[aria-selected="true"]')?.focus(); });
     document.addEventListener('click', (event) => { if (!event.target.closest('.target-picker')) closeTargetPicker(); });
@@ -65,10 +66,10 @@
     $('rotateLeft').addEventListener('click', () => setControlValue('rotation', Number($('rotation').value) - 90)); $('rotateRight').addEventListener('click', () => setControlValue('rotation', Number($('rotation').value) + 90)); $('rotate45').addEventListener('click', () => setControlValue('rotation', 45)); $('rotate180').addEventListener('click', () => setControlValue('rotation', 180));
     $('flipH').addEventListener('click', () => applyValues({ flipHorizontal: !$('flipH').classList.contains('active') })); $('flipV').addEventListener('click', () => applyValues({ flipVertical: !$('flipV').classList.contains('active') }));
     $('resetButton').addEventListener('click', resetTarget); $('resetAllButton').addEventListener('click', resetAll); $('themeButton').addEventListener('click', toggleTheme);
-    $('keyboardToggle').addEventListener('change', async () => { const enabled = $('keyboardToggle').checked; $('keyboardStatus').textContent = enabled ? 'Shortcuts enabled: R rotate, H/V flip, +/- zoom, arrows pan.' : 'Shortcuts disabled. Use the controls or direct media gestures.'; await chrome.storage.local.set({ keyboardEnabled: enabled }); try { await sendToTab({ type: 'ROTATEFLOW_SET_SETTINGS', keyboardEnabled: enabled }); } catch (_) {} });
+    $('keyboardToggle').addEventListener('change', async () => { const enabled = $('keyboardToggle').checked; setKeyboardUi(enabled); await chrome.storage.local.set({ keyboardEnabled: enabled }); try { await sendToTab({ type: 'ROTATEFLOW_SET_SETTINGS', keyboardEnabled: enabled }); } catch (_) {} });
   }
   bind();
   try { if (localStorage.getItem('rotateflow-theme') === 'dark') document.body.classList.add('dark'); } catch (_) {}
-  chrome.storage.local.get({ keyboardEnabled: true }, (settings) => { $('keyboardToggle').checked = settings.keyboardEnabled !== false; });
+  chrome.storage.local.get({ keyboardEnabled: true }, (settings) => { setKeyboardUi(settings.keyboardEnabled !== false); });
   chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => { if (chrome.runtime.lastError || !tabs?.[0]?.id) return; activeTabId = tabs[0].id; refreshState(); });
 })();

@@ -218,9 +218,22 @@
     return null;
   }
 
+  function setKeyboardEnabled(enabled) {
+    keyboardEnabled = enabled;
+    chrome.storage?.local.set({ keyboardEnabled: enabled });
+    const notice = document.createElement('div');
+    notice.textContent = `RotateFlow shortcuts ${enabled ? 'enabled' : 'disabled'} · Press O to toggle`;
+    Object.assign(notice.style, { position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: '2147483647', padding: '8px 12px', borderRadius: '8px', background: enabled ? '#1d4ed8' : '#334155', color: '#fff', font: '12px system-ui, sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,.3)', pointerEvents: 'none' });
+    document.documentElement.appendChild(notice);
+    window.setTimeout(() => notice.remove(), 1600);
+  }
+
   function handleKeydown(event) {
-    if (!keyboardEnabled || isInput(event.target)) return;
-    const key = event.key; const state = resolveTarget(); if (!state) return;
+    if (isInput(event.target)) return;
+    const key = event.key;
+    if (key.toLowerCase() === 'o') { event.preventDefault(); setKeyboardEnabled(!keyboardEnabled); return; }
+    if (!keyboardEnabled) return;
+    const state = resolveTarget(); if (!state) return;
     const values = {};
     if (key === '+' || key === '=') values.zoom = state.zoom + 0.1;
     else if (key === '-' || key === '_') values.zoom = state.zoom - 0.1;
