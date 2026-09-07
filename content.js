@@ -71,8 +71,8 @@
       }
     }
     document.querySelectorAll(TARGET_SELECTOR).forEach((element) => { if (isVisibleMedia(element)) ensureState(element); });
-    if (activeTargetId && !states.has(activeTargetId)) activeTargetId = null;
-    if (!activeTargetId) activeTargetId = getSortedStates()[0]?.id || null;
+    const preferred = getPreferredState();
+    activeTargetId = preferred?.id || null;
   }
 
   function getSortedStates() {
@@ -80,6 +80,23 @@
       const ar = a.element.getBoundingClientRect(); const br = b.element.getBoundingClientRect();
       return (br.width * br.height) - (ar.width * ar.height);
     });
+  }
+
+  function getPreferredState() {
+    const candidates = getSortedStates();
+    const full = fullscreenElement();
+    const fullscreenVideo = candidates.find((state) => state.element instanceof HTMLVideoElement && full && (full === state.element || full.contains(state.element)));
+    if (fullscreenVideo) return fullscreenVideo;
+    const playingVideo = candidates.find((state) => state.element instanceof HTMLVideoElement && !state.element.paused && state.element.readyState >= 2);
+    if (playingVideo) return playingVideo;
+    if (isYouTubePage()) {
+      const youtubeVideo = candidates.find((state) => state.element instanceof HTMLVideoElement);
+      if (youtubeVideo) return youtubeVideo;
+    }
+    const video = candidates.find((state) => state.element instanceof HTMLVideoElement);
+    if (video) return video;
+    const image = candidates.find((state) => state.element instanceof HTMLImageElement);
+    return image || candidates[0] || null;
   }
 
   function makeTransform(state) {
@@ -152,7 +169,8 @@
 
   function getTargetSummaries() {
     scanMedia();
-    return getSortedStates().map((state, index) => ({ ...serializeState(state), index: index + 1, active: state.id === activeTargetId }));
+    const preferred = getPreferredState();
+    return preferred ? [{ ...serializeState(preferred), index: 1, active: true }] : [];
   }
 
   function resolveTarget(targetId) {

@@ -1,81 +1,53 @@
 # RotateFlow
 
-RotateFlow is a small Manifest V3 Chrome extension for changing how images, videos, canvases, and embedded media are displayed in the browser. It rotates, zooms, pans, flips, and adjusts brightness or contrast without downloading, re-encoding, or changing the original file.
+RotateFlow is a lightweight Chrome extension for rotating, zooming, panning, flipping, and adjusting images and videos directly in the browser. It changes the display only; the original media is never downloaded, re-encoded, or modified.
 
-## What it does
+## Features
 
-- Detects visible images, videos, canvases, iframes, and embedded media.
-- Lets you choose a target when a page has more than one media element.
-- Supports zoom from 10% to 1000%, rotation, panning, horizontal and vertical flips, brightness, and contrast.
-- Provides sliders, clearly labeled numeric inputs, preset buttons, and a reset button for each setting.
-- Keeps state separately for each target during the tab session.
-- Works with normal webpages and local files when Chrome grants file-URL access.
-- Includes a light/dark popup, context-menu actions, fullscreen recovery, and optional keyboard shortcuts.
+- One primary media target at a time, with playing videos preferred over canvases and thumbnails.
+- Zoom from 10% to 1000%, rotation, panning, flips, brightness, and contrast.
+- Sliders, exact numeric inputs, preset buttons, and per-setting reset buttons.
+- Direct controls: Ctrl/Cmd-scroll to zoom, double-click to zoom, and Shift-drag or middle-button drag to pan.
+- Optional keyboard shortcuts, including `O` to turn shortcuts on or off.
+- Light and dark themes, context-menu actions, local-file support, and fullscreen recovery for video players such as YouTube.
 
-All changes are display-only. RotateFlow does not edit the source media.
+## Installation
 
-## Install for development
+### Option 1: Download the ZIP
 
-1. Clone the repository or download it from GitHub.
-2. Open `chrome://extensions` in Chrome and turn on **Developer mode**.
-3. Click **Load unpacked** and select the folder containing `manifest.json`.
-4. Pin RotateFlow if you want quick access from the toolbar.
-5. For local HTML, image, or video files, open RotateFlow’s extension details and enable **Allow access to file URLs**.
+1. Open the [RotateFlow GitHub page](https://github.com/abishek-ghimire/RotateFlow).
+2. Choose **Code → Download ZIP** and extract the archive.
+3. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
+4. Select the extracted folder containing `manifest.json`.
 
-After pulling updates, click **Reload** on the extension card.
+### Option 2: Clone the repository
 
 ```bash
 git clone https://github.com/abishek-ghimire/RotateFlow.git
 cd RotateFlow
 ```
 
+Then open `chrome://extensions`, enable **Developer mode**, and load the cloned folder. Click **Reload** on the extension card after pulling updates.
+
+For local HTML, image, or video files, open RotateFlow’s extension details and enable **Allow access to file URLs**.
+
 ## Use it
 
-Open a page with media and click the RotateFlow toolbar button. Select a target, move a slider, or type an exact value in the **Type value** field. Press Enter or leave the field to apply the value. Each setting has its own reset button, while **Reset target** and **Reset all** are available for larger resets.
+Open a page with media and click the RotateFlow toolbar button. The extension chooses the most relevant visible image or video. Use the sliders or the labeled **Type value** fields, then press Enter or leave the field to apply a value.
 
-You can also work directly on the page:
-
-| Action | How |
-|---|---|
-| Zoom toward the pointer | Ctrl/Cmd + mouse wheel |
-| Quick zoom | Double-click the media |
-| Pan | Shift-drag or middle-button drag |
-| Rotate or flip | Keyboard shortcuts when enabled |
-| Quick rotation | Right-click and choose a RotateFlow action |
-
-### Keyboard shortcuts
-
-Keyboard controls are optional. Use the popup toggle or press **O** on the page to enable or disable them. The setting is remembered.
-
-| Key | Action |
-|---|---|
-| `+` / `-` | Zoom in or out |
-| `0` | Reset zoom |
-| `R` / `Shift+R` | Rotate 15° clockwise or counter-clockwise |
-| `H` / `V` | Flip horizontally or vertically |
-| Arrow keys or `W/A/S/D` | Pan by 10 pixels |
-| `Backspace` | Reset the selected media |
-| `O` | Toggle keyboard shortcuts |
-| `Escape` | Deselect the current media |
-
-Shortcuts are ignored while typing in a form field. Chrome internal pages and some restricted frames cannot be modified by extensions.
+`+` and `-` zoom, `R` rotates, `H` and `V` flip, arrow keys or `W/A/S/D` pan, and `O` toggles keyboard shortcuts. Shortcuts are ignored while typing in a form field.
 
 ## Project files
 
 ```text
-manifest.json   Extension configuration
-background.js   Context-menu service worker
-content.js      Media detection, transforms, interactions, fullscreen recovery
+manifest.json   Chrome extension configuration
+background.js   Service worker and context menus
+content.js      Media detection and transformations
 index.html      Popup markup
-script.js       Popup behavior and state synchronization
+script.js       Popup behavior
 style.css       Popup styling
-Logo.png        Extension icon
 ```
 
-## Privacy
+## Privacy and license
 
-RotateFlow is local-only. It has no analytics, account system, upload flow, or external processing service. The original media remains where it was opened.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+RotateFlow is local-only and has no analytics, accounts, uploads, or external processing. It is released under the MIT License; see [LICENSE](LICENSE).
