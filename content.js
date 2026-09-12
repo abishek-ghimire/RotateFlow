@@ -60,7 +60,7 @@
         id, element, zoom: restored?.zoom ?? 1, x: restored?.x ?? 0, y: restored?.y ?? 0, rotation: restored?.rotation ?? 0,
         flipHorizontal: restored?.flipHorizontal ?? false, flipVertical: restored?.flipVertical ?? false, brightness: restored?.brightness ?? 1, contrast: restored?.contrast ?? 1,
         original: { transform: element.style.transform, transformPriority: element.style.getPropertyPriority('transform'), transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter, filterPriority: element.style.getPropertyPriority('filter') },
-        parents: [], viewerEffects: { root: null, rootStyles: null, hidden: [], overflow: [] }
+        parents: [], viewerEffects: { root: null, rootStyles: null, hidden: [], overflow: [], ancestors: [] }
       };
       states.set(id, state);
       if (restored) { pendingMediaState = null; pendingVideoState = null; if (hasTransform(state)) { applyState(state, {}, false); if (isFullscreenMedia(state.element)) scheduleFullscreenRecovery(state); } }
@@ -177,24 +177,38 @@
     return element.parentElement;
   }
 
-  function suppressWhatsAppBackdrop(state) {
-    if (!isWhatsAppPage() || !(state.element instanceof HTMLImageElement) || state.viewerEffects.root) return;
-    const root = viewerRootFor(state.element);
+  function setImportantIfNeeded(element, property, value) {
+    const current = window.getComputedStyle(element).getPropertyValue(property);
+    if (current !== value) element.style.setProperty(property, value, 'important');
+  }
+
+  function enforceWhatsAppBackdrop(state) {
+    if (!isWhatsAppPage() || !(state.element instanceof HTMLImageElement)) return;
+    const effects = state.viewerEffects;
+    const root = effects.root || viewerRootFor(state.element);
     if (!root) return;
-    const rootStyle = window.getComputedStyle(root);
-    state.viewerEffects.root = root;
-    state.viewerEffects.rootStyles = { backgroundImage: root.style.backgroundImage, backdropFilter: root.style.backdropFilter, webkitBackdropFilter: root.style.webkitBackdropFilter };
-    if (rootStyle.backgroundImage !== 'none') root.style.setProperty('background-image', 'none', 'important');
-    if (rootStyle.backdropFilter !== 'none') root.style.setProperty('backdrop-filter', 'none', 'important');
-    if (rootStyle.webkitBackdropFilter !== 'none') root.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    if (!effects.root) {
+      const rootStyle = window.getComputedStyle(root);
+      effects.root = root;
+      effects.rootStyles = { backgroundImage: root.style.backgroundImage, filter: root.style.filter, backdropFilter: root.style.backdropFilter, webkitBackdropFilter: root.style.webkitBackdropFilter };
+        if (rootStyle.backgroundImage !== 'none') setImportantIfNeeded(root, 'background-image', 'none');
+      if (rootStyle.filter !== 'none') setImportantIfNeeded(root, 'filter', 'none');
+      if (rootStyle.backdropFilter !== 'none') setImportantIfNeeded(root, 'backdrop-filter', 'none');
+      if (rootStyle.webkitBackdropFilter !== 'none') setImportantIfNeeded(root, '-webkit-backdrop-filter', 'none');
+    } else {
+      setImportantIfNeeded(root, 'background-image', 'none');
+      setImportantIfNeeded(root, 'filter', 'none');
+      setImportantIfNeeded(root, 'backdrop-filter', 'none');
+      setImportantIfNeeded(root, '-webkit-backdrop-filter', 'none');
+    }
     let ancestor = state.element.parentElement;
     let depth = 0;
-    while (ancestor && depth < 6 && ancestor !== root) {
+    while (ancestor && depth < 8 && ancestor !== root) {
       const current = window.getComputedStyle(ancestor);
-      if (current.overflow !== 'hidden' && current.overflow !== 'clip') {
-        state.viewerEffects.overflow.push({ element: ancestor, overflow: ancestor.style.overflow, overflowX: ancestor.style.overflowX, overflowY: ancestor.style.overflowY });
-        ancestor.style.setProperty('overflow', 'hidden', 'important'); ancestor.style.setProperty('overflow-x', 'hidden', 'important'); ancestor.style.setProperty('overflow-y', 'hidden', 'important');
-      }
+      if (!effects.overflow.some((item) => item.element === ancestor) && current.overflow !== 'hidden' && current.overflow !== 'clip') effects.overflow.push({ element: ancestor, overflow: ancestor.style.overflow, overflowX: ancestor.style.overflowX, overflowY: ancestor.style.overflowY });
+      setImportantIfNeeded(ancestor, 'overflow', 'hidden'); setImportantIfNeeded(ancestor, 'overflow-x', 'hidden'); setImportantIfNeeded(ancestor, 'overflow-y', 'hidden');
+      if (!effects.ancestors.some((item) => item.element === ancestor)) effects.ancestors.push({ element: ancestor, filter: ancestor.style.filter, filterPriority: ancestor.style.getPropertyPriority('filter'), backdropFilter: ancestor.style.backdropFilter, webkitBackdropFilter: ancestor.style.webkitBackdropFilter });
+      setImportantIfNeeded(ancestor, 'filter', 'none'); setImportantIfNeeded(ancestor, 'backdrop-filter', 'none'); setImportantIfNeeded(ancestor, '-webkit-backdrop-filter', 'none');
       ancestor = ancestor.parentElement; depth += 1;
     }
     root.querySelectorAll('*').forEach((candidate) => {
@@ -204,8 +218,9 @@
       const isBlurred = style.filter.includes('blur(') || style.backdropFilter.includes('blur(') || style.webkitBackdropFilter.includes('blur(');
       const isBackdropName = /(backdrop|blur|background)/.test(name) && style.backgroundImage !== 'none';
       if (isBlurred || isBackdropName) {
-        state.viewerEffects.hidden.push({ element: candidate, visibility: candidate.style.visibility, pointerEvents: candidate.style.pointerEvents });
-        candidate.style.setProperty('visibility', 'hidden', 'important'); candidate.style.setProperty('pointer-events', 'none', 'important');
+        if (!effects.hidden.some((item) => item.element === candidate)) effects.hidden.push({ element: candidate, visibility: candidate.style.visibility, pointerEvents: candidate.style.pointerEvents });
+        if (style.visibility !== 'hidden') candidate.style.setProperty('visibility', 'hidden', 'important');
+        if (style.pointerEvents !== 'none') candidate.style.setProperty('pointer-events', 'none', 'important');
       }
     });
   }
@@ -213,13 +228,15 @@
   function restoreViewerEffects(state) {
     if (!state?.viewerEffects) return;
     state.viewerEffects.hidden.forEach((item) => { item.element.style.visibility = item.visibility; item.element.style.pointerEvents = item.pointerEvents; });
+    state.viewerEffects.ancestors.forEach((item) => { item.element.style.filter = item.filter; item.element.style.backdropFilter = item.backdropFilter; item.element.style.webkitBackdropFilter = item.webkitBackdropFilter; });
     state.viewerEffects.overflow.forEach((item) => { item.element.style.overflow = item.overflow; item.element.style.overflowX = item.overflowX; item.element.style.overflowY = item.overflowY; });
     if (state.viewerEffects.root && state.viewerEffects.rootStyles) {
       state.viewerEffects.root.style.backgroundImage = state.viewerEffects.rootStyles.backgroundImage;
+      state.viewerEffects.root.style.filter = state.viewerEffects.rootStyles.filter;
       state.viewerEffects.root.style.backdropFilter = state.viewerEffects.rootStyles.backdropFilter;
       state.viewerEffects.root.style.webkitBackdropFilter = state.viewerEffects.rootStyles.webkitBackdropFilter;
     }
-    state.viewerEffects = { root: null, rootStyles: null, hidden: [], overflow: [] };
+    state.viewerEffects = { root: null, rootStyles: null, hidden: [], overflow: [], ancestors: [] };
   }
 
   function applyState(state, values = {}, animate = true) {
@@ -233,7 +250,7 @@
     state.brightness = clamp(values.brightness ?? state.brightness, 0.5, 1.5);
     state.contrast = clamp(values.contrast ?? state.contrast, 0.5, 1.5);
     makeOverflowSafe(state);
-    suppressWhatsAppBackdrop(state);
+    enforceWhatsAppBackdrop(state);
     state.element.style.setProperty('transform-origin', 'center center', 'important');
     state.element.style.setProperty('will-change', 'transform, filter');
     state.element.style.setProperty('transition', animate ? 'transform 200ms ease-out, filter 200ms ease-out' : 'none');
@@ -397,7 +414,7 @@
   const observer = new MutationObserver((records) => {
     let needsScan = false;
     records.forEach((record) => {
-      if (record.type === 'childList') needsScan = true;
+      if (record.type === 'childList') { needsScan = true; states.forEach((state) => { if (hasTransform(state)) enforceWhatsAppBackdrop(state); }); }
       if (record.type === 'attributes') {
         const state = [...states.values()].find((candidate) => candidate.element === record.target);
         if (state) reapplyIfChanged(state);
@@ -409,6 +426,7 @@
   observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'src', 'srcset', 'sizes', 'poster'] });
   function reapplyIfChanged(state) {
     if (!state || !state.element.isConnected || !hasTransform(state)) return;
+    enforceWhatsAppBackdrop(state);
     const expectedTransform = makeTransform(state);
     const expectedFilter = `brightness(${state.brightness}) contrast(${state.contrast})`;
     if (state.element.style.getPropertyValue('transform') !== expectedTransform || state.element.style.getPropertyValue('filter') !== expectedFilter) applyState(state, {}, false);
