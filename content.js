@@ -43,6 +43,7 @@
   }
 
   function isYouTubePage() { return /(^|\.)youtube\.com$|(^|\.)youtube-nocookie\.com$|(^|\.)youtu\.be$/.test(location.hostname); }
+  function isWhatsAppPage() { return /(^|\.)web\.whatsapp\.com$/.test(location.hostname); }
 
   function ensureState(element) {
     let id = element.getAttribute(ID_ATTRIBUTE);
@@ -59,7 +60,7 @@
         id, element, zoom: restored?.zoom ?? 1, x: restored?.x ?? 0, y: restored?.y ?? 0, rotation: restored?.rotation ?? 0,
         flipHorizontal: restored?.flipHorizontal ?? false, flipVertical: restored?.flipVertical ?? false, brightness: restored?.brightness ?? 1, contrast: restored?.contrast ?? 1,
         original: { transform: element.style.transform, transformPriority: element.style.getPropertyPriority('transform'), transformOrigin: element.style.transformOrigin, transition: element.style.transition, willChange: element.style.willChange, filter: element.style.filter, filterPriority: element.style.getPropertyPriority('filter') },
-        parents: []
+        parents: [], viewerEffects: { root: null, rootStyles: null, hidden: [], overflow: [] }
       };
       states.set(id, state);
       if (restored) { pendingMediaState = null; pendingVideoState = null; if (hasTransform(state)) { applyState(state, {}, false); if (isFullscreenMedia(state.element)) scheduleFullscreenRecovery(state); } }
@@ -70,6 +71,7 @@
   function scanMedia() {
     for (const [id, state] of states) {
       if (!state.element.isConnected) {
+        restoreViewerEffects(state);
         if (hasTransform(state)) {
           pendingMediaState = { type: typeFor(state.element), source: sourceFor(state.element), zoom: state.zoom, x: state.x, y: state.y, rotation: state.rotation, flipHorizontal: state.flipHorizontal, flipVertical: state.flipVertical, brightness: state.brightness, contrast: state.contrast };
           if (isYouTubePage() && state.element instanceof HTMLVideoElement) pendingVideoState = pendingMediaState;
@@ -143,6 +145,7 @@
   function hasTransform(state) { return state.zoom !== 1 || state.x !== 0 || state.y !== 0 || state.rotation !== 0 || state.flipHorizontal || state.flipVertical || state.brightness !== 1 || state.contrast !== 1; }
 
   function makeOverflowSafe(state) {
+    if (isWhatsAppPage() && state.element instanceof HTMLImageElement) return;
     if (state.parents.length) return;
     let parent = state.element.parentElement;
     let depth = 0;
@@ -161,6 +164,64 @@
     state.parents = [];
   }
 
+  function viewerRootFor(element) {
+    let node = element.parentElement;
+    let depth = 0;
+    while (node && depth < 10) {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      if (node.getAttribute('role') === 'dialog' || node.getAttribute('aria-modal') === 'true'
+        || ((style.position === 'fixed' || style.position === 'absolute') && rect.width >= window.innerWidth * 0.6 && rect.height >= window.innerHeight * 0.6)) return node;
+      node = node.parentElement; depth += 1;
+    }
+    return element.parentElement;
+  }
+
+  function suppressWhatsAppBackdrop(state) {
+    if (!isWhatsAppPage() || !(state.element instanceof HTMLImageElement) || state.viewerEffects.root) return;
+    const root = viewerRootFor(state.element);
+    if (!root) return;
+    const rootStyle = window.getComputedStyle(root);
+    state.viewerEffects.root = root;
+    state.viewerEffects.rootStyles = { backgroundImage: root.style.backgroundImage, backdropFilter: root.style.backdropFilter, webkitBackdropFilter: root.style.webkitBackdropFilter };
+    if (rootStyle.backgroundImage !== 'none') root.style.setProperty('background-image', 'none', 'important');
+    if (rootStyle.backdropFilter !== 'none') root.style.setProperty('backdrop-filter', 'none', 'important');
+    if (rootStyle.webkitBackdropFilter !== 'none') root.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    let ancestor = state.element.parentElement;
+    let depth = 0;
+    while (ancestor && depth < 6 && ancestor !== root) {
+      const current = window.getComputedStyle(ancestor);
+      if (current.overflow !== 'hidden' && current.overflow !== 'clip') {
+        state.viewerEffects.overflow.push({ element: ancestor, overflow: ancestor.style.overflow, overflowX: ancestor.style.overflowX, overflowY: ancestor.style.overflowY });
+        ancestor.style.setProperty('overflow', 'hidden', 'important'); ancestor.style.setProperty('overflow-x', 'hidden', 'important'); ancestor.style.setProperty('overflow-y', 'hidden', 'important');
+      }
+      ancestor = ancestor.parentElement; depth += 1;
+    }
+    root.querySelectorAll('*').forEach((candidate) => {
+      if (candidate === state.element || candidate.contains(state.element) || state.element.contains(candidate)) return;
+      const style = window.getComputedStyle(candidate);
+      const name = `${candidate.className || ''} ${candidate.getAttribute('data-testid') || ''}`.toLowerCase();
+      const isBlurred = style.filter.includes('blur(') || style.backdropFilter.includes('blur(') || style.webkitBackdropFilter.includes('blur(');
+      const isBackdropName = /(backdrop|blur|background)/.test(name) && style.backgroundImage !== 'none';
+      if (isBlurred || isBackdropName) {
+        state.viewerEffects.hidden.push({ element: candidate, visibility: candidate.style.visibility, pointerEvents: candidate.style.pointerEvents });
+        candidate.style.setProperty('visibility', 'hidden', 'important'); candidate.style.setProperty('pointer-events', 'none', 'important');
+      }
+    });
+  }
+
+  function restoreViewerEffects(state) {
+    if (!state?.viewerEffects) return;
+    state.viewerEffects.hidden.forEach((item) => { item.element.style.visibility = item.visibility; item.element.style.pointerEvents = item.pointerEvents; });
+    state.viewerEffects.overflow.forEach((item) => { item.element.style.overflow = item.overflow; item.element.style.overflowX = item.overflowX; item.element.style.overflowY = item.overflowY; });
+    if (state.viewerEffects.root && state.viewerEffects.rootStyles) {
+      state.viewerEffects.root.style.backgroundImage = state.viewerEffects.rootStyles.backgroundImage;
+      state.viewerEffects.root.style.backdropFilter = state.viewerEffects.rootStyles.backdropFilter;
+      state.viewerEffects.root.style.webkitBackdropFilter = state.viewerEffects.rootStyles.webkitBackdropFilter;
+    }
+    state.viewerEffects = { root: null, rootStyles: null, hidden: [], overflow: [] };
+  }
+
   function applyState(state, values = {}, animate = true) {
     if (!state || !state.element.isConnected) return null;
     state.zoom = clamp(values.zoom ?? state.zoom, 0.1, 10);
@@ -172,6 +233,7 @@
     state.brightness = clamp(values.brightness ?? state.brightness, 0.5, 1.5);
     state.contrast = clamp(values.contrast ?? state.contrast, 0.5, 1.5);
     makeOverflowSafe(state);
+    suppressWhatsAppBackdrop(state);
     state.element.style.setProperty('transform-origin', 'center center', 'important');
     state.element.style.setProperty('will-change', 'transform, filter');
     state.element.style.setProperty('transition', animate ? 'transform 200ms ease-out, filter 200ms ease-out' : 'none');
@@ -189,6 +251,7 @@
     state.element.style.setProperty('transition', state.original.transition, '');
     state.element.style.setProperty('will-change', state.original.willChange, '');
     state.element.style.setProperty('filter', state.original.filter, state.original.filterPriority || '');
+    restoreViewerEffects(state);
     restoreOverflow(state);
     return serializeState(state);
   }
