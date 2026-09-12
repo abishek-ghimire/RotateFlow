@@ -11,6 +11,7 @@
   let keyboardEnabled = true;
   let pointerDrag = null;
   let pendingVideoState = null;
+  let pendingMediaState = null;
   let fullscreenRecoveryTimer = 0;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
@@ -24,9 +25,9 @@
   function isVisibleMedia(element) {
     if (!isSupportedElement(element) || !element.isConnected) return false;
     const style = window.getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || element.getAttribute('aria-hidden') === 'true') return false;
     const rect = element.getBoundingClientRect();
-    return rect.width >= 50 && rect.height >= 50;
+    return rect.width >= 50 && rect.height >= 50 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
   }
 
   function typeFor(element) {
@@ -50,7 +51,10 @@
       element.setAttribute(ID_ATTRIBUTE, id);
     }
     if (!states.has(id)) {
-      const restored = element instanceof HTMLVideoElement && pendingVideoState ? pendingVideoState : null;
+      const source = sourceFor(element);
+      const matchesPending = pendingMediaState && pendingMediaState.type === typeFor(element)
+        && (!pendingMediaState.source || !source || pendingMediaState.source === source);
+      const restored = matchesPending ? pendingMediaState : (element instanceof HTMLVideoElement && pendingVideoState ? pendingVideoState : null);
       const state = {
         id, element, zoom: restored?.zoom ?? 1, x: restored?.x ?? 0, y: restored?.y ?? 0, rotation: restored?.rotation ?? 0,
         flipHorizontal: restored?.flipHorizontal ?? false, flipVertical: restored?.flipVertical ?? false, brightness: restored?.brightness ?? 1, contrast: restored?.contrast ?? 1,
@@ -58,7 +62,7 @@
         parents: []
       };
       states.set(id, state);
-      if (restored) { pendingVideoState = null; if (hasTransform(state)) { applyState(state, {}, false); if (isFullscreenMedia(state.element)) scheduleFullscreenRecovery(state); } }
+      if (restored) { pendingMediaState = null; pendingVideoState = null; if (hasTransform(state)) { applyState(state, {}, false); if (isFullscreenMedia(state.element)) scheduleFullscreenRecovery(state); } }
     }
     return states.get(id);
   }
@@ -66,12 +70,21 @@
   function scanMedia() {
     for (const [id, state] of states) {
       if (!state.element.isConnected) {
-        if (isYouTubePage() && state.element instanceof HTMLVideoElement && hasTransform(state)) pendingVideoState = { zoom: state.zoom, x: state.x, y: state.y, rotation: state.rotation, flipHorizontal: state.flipHorizontal, flipVertical: state.flipVertical, brightness: state.brightness, contrast: state.contrast };
+        if (hasTransform(state)) {
+          pendingMediaState = { type: typeFor(state.element), source: sourceFor(state.element), zoom: state.zoom, x: state.x, y: state.y, rotation: state.rotation, flipHorizontal: state.flipHorizontal, flipVertical: state.flipVertical, brightness: state.brightness, contrast: state.contrast };
+          if (isYouTubePage() && state.element instanceof HTMLVideoElement) pendingVideoState = pendingMediaState;
+        }
         states.delete(id);
       }
     }
     document.querySelectorAll(TARGET_SELECTOR).forEach((element) => { if (isVisibleMedia(element)) ensureState(element); });
     const preferred = getPreferredState();
+    if (preferred && pendingMediaState && typeFor(preferred.element) === pendingMediaState.type) {
+      const restored = pendingMediaState;
+      pendingMediaState = null;
+      Object.assign(preferred, { zoom: restored.zoom, x: restored.x, y: restored.y, rotation: restored.rotation, flipHorizontal: restored.flipHorizontal, flipVertical: restored.flipVertical, brightness: restored.brightness, contrast: restored.contrast });
+      applyState(preferred, {}, false);
+    }
     activeTargetId = preferred?.id || null;
   }
 
@@ -82,6 +95,29 @@
     });
   }
 
+  function pointHitsMedia(element, x, y) {
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    return hit === element || Boolean(hit && element.contains(hit));
+  }
+
+  function imagePriority(state) {
+    const element = state.element;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    let score = Math.min(rect.width * rect.height, 4000000) / 1000;
+    if (pointHitsMedia(element, centerX, centerY)) score += 250000;
+    if (pointHitsMedia(element, window.innerWidth / 2, window.innerHeight / 2)) score += 500000;
+    if (pointHitsMedia(element, centerX, rect.top + rect.height * 0.25)) score += 90000;
+    if (pointHitsMedia(element, centerX, rect.top + rect.height * 0.75)) score += 90000;
+    if (style.position === 'fixed' || style.position === 'absolute') score += 15000;
+    if (element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0) score += 5000;
+    if (element.closest('[role="dialog"], [aria-modal="true"], [data-testid*="media"], [data-testid*="viewer"], [class*="modal"], [class*="viewer"]')) score += 100000;
+    return score;
+  }
+
   function getPreferredState() {
     const candidates = getSortedStates();
     const full = fullscreenElement();
@@ -89,14 +125,11 @@
     if (fullscreenVideo) return fullscreenVideo;
     const playingVideo = candidates.find((state) => state.element instanceof HTMLVideoElement && !state.element.paused && state.element.readyState >= 2);
     if (playingVideo) return playingVideo;
-    if (isYouTubePage()) {
-      const youtubeVideo = candidates.find((state) => state.element instanceof HTMLVideoElement);
-      if (youtubeVideo) return youtubeVideo;
-    }
     const video = candidates.find((state) => state.element instanceof HTMLVideoElement);
     if (video) return video;
-    const image = candidates.find((state) => state.element instanceof HTMLImageElement);
-    return image || candidates[0] || null;
+    const images = candidates.filter((state) => state.element instanceof HTMLImageElement && sourceFor(state.element));
+    if (images.length) return images.sort((a, b) => imagePriority(b) - imagePriority(a))[0];
+    return candidates[0] || null;
   }
 
   function makeTransform(state) {
@@ -179,7 +212,7 @@
     if (requested && isVisibleMedia(requested.element)) return requested;
     const hinted = targetId ? document.getElementById(String(targetId)) : null;
     if (hinted && isVisibleMedia(hinted)) return ensureState(hinted);
-    return states.get(activeTargetId) || getSortedStates()[0] || null;
+    return states.get(activeTargetId) || getPreferredState();
   }
 
   function zoomAtPoint(state, delta, clientX, clientY) {
@@ -304,12 +337,13 @@
       if (record.type === 'childList') needsScan = true;
       if (record.type === 'attributes') {
         const state = [...states.values()].find((candidate) => candidate.element === record.target);
-        if (state && isFullscreenMedia(state.element)) reapplyIfChanged(state);
+        if (state) reapplyIfChanged(state);
+        if (['src', 'srcset', 'sizes', 'poster'].includes(record.attributeName)) needsScan = true;
       }
     });
     if (needsScan) scheduleScan();
   });
-  observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+  observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'src', 'srcset', 'sizes', 'poster'] });
   function reapplyIfChanged(state) {
     if (!state || !state.element.isConnected || !hasTransform(state)) return;
     const expectedTransform = makeTransform(state);
@@ -338,6 +372,9 @@
     scheduleScan();
   }
   window.addEventListener('resize', scheduleScan, { passive: true }); window.addEventListener('pageshow', scheduleScan, { passive: true });
+  window.addEventListener('load', scheduleScan, true);
+  window.addEventListener('loadeddata', scheduleScan, true);
+  window.addEventListener('canplay', scheduleScan, true);
   document.addEventListener('fullscreenchange', handleFullscreenChange, true);
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange, true);
   scanMedia(); states.forEach(attachInteractions);
