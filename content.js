@@ -190,7 +190,7 @@
     if (!effects.root) {
       const rootStyle = window.getComputedStyle(root);
       effects.root = root;
-      effects.rootStyles = { backgroundImage: root.style.backgroundImage, filter: root.style.filter, backdropFilter: root.style.backdropFilter, webkitBackdropFilter: root.style.webkitBackdropFilter };
+      effects.rootStyles = { backgroundImage: root.style.backgroundImage || '', filter: root.style.filter || '', backdropFilter: root.style.backdropFilter || '', webkitBackdropFilter: root.style.webkitBackdropFilter || '' };
         if (rootStyle.backgroundImage !== 'none') setImportantIfNeeded(root, 'background-image', 'none');
       if (rootStyle.filter !== 'none') setImportantIfNeeded(root, 'filter', 'none');
       if (rootStyle.backdropFilter !== 'none') setImportantIfNeeded(root, 'backdrop-filter', 'none');
@@ -207,7 +207,7 @@
       const current = window.getComputedStyle(ancestor);
       if (!effects.overflow.some((item) => item.element === ancestor) && current.overflow !== 'hidden' && current.overflow !== 'clip') effects.overflow.push({ element: ancestor, overflow: ancestor.style.overflow, overflowX: ancestor.style.overflowX, overflowY: ancestor.style.overflowY });
       setImportantIfNeeded(ancestor, 'overflow', 'hidden'); setImportantIfNeeded(ancestor, 'overflow-x', 'hidden'); setImportantIfNeeded(ancestor, 'overflow-y', 'hidden');
-      if (!effects.ancestors.some((item) => item.element === ancestor)) effects.ancestors.push({ element: ancestor, filter: ancestor.style.filter, filterPriority: ancestor.style.getPropertyPriority('filter'), backdropFilter: ancestor.style.backdropFilter, webkitBackdropFilter: ancestor.style.webkitBackdropFilter });
+        if (!effects.ancestors.some((item) => item.element === ancestor)) effects.ancestors.push({ element: ancestor, filter: ancestor.style.filter || '', filterPriority: ancestor.style.getPropertyPriority('filter'), backdropFilter: ancestor.style.backdropFilter || '', webkitBackdropFilter: ancestor.style.webkitBackdropFilter || '' });
       setImportantIfNeeded(ancestor, 'filter', 'none'); setImportantIfNeeded(ancestor, 'backdrop-filter', 'none'); setImportantIfNeeded(ancestor, '-webkit-backdrop-filter', 'none');
       ancestor = ancestor.parentElement; depth += 1;
     }
@@ -215,7 +215,10 @@
       if (candidate === state.element || candidate.contains(state.element) || state.element.contains(candidate)) return;
       const style = window.getComputedStyle(candidate);
       const name = `${candidate.className || ''} ${candidate.getAttribute('data-testid') || ''}`.toLowerCase();
-      const isBlurred = style.filter.includes('blur(') || style.backdropFilter.includes('blur(') || style.webkitBackdropFilter.includes('blur(');
+      const filterValue = String(style.filter || '');
+      const backdropFilterValue = String(style.backdropFilter || '');
+      const webkitBackdropFilterValue = String(style.webkitBackdropFilter || '');
+      const isBlurred = filterValue.includes('blur(') || backdropFilterValue.includes('blur(') || webkitBackdropFilterValue.includes('blur(');
       const isBackdropName = /(backdrop|blur|background)/.test(name) && style.backgroundImage !== 'none';
       if (isBlurred || isBackdropName) {
         if (!effects.hidden.some((item) => item.element === candidate)) effects.hidden.push({ element: candidate, visibility: candidate.style.visibility, pointerEvents: candidate.style.pointerEvents });
