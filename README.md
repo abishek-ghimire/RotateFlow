@@ -13,7 +13,7 @@ RotateFlow is a **Manifest V3 Chrome extension** for transforming images and vid
   - **Flip:** horizontal and vertical controls.
   - **Filters:** brightness and contrast from 50%–150%.
 - **Usability:** per-setting reset buttons, light/dark theme, local-file support, and context-menu actions.
-- **Keyboard shortcuts:** optional shortcuts with `O` to enable or disable them.
+- **Keyboard shortcuts:** optional shortcuts toggleable via the extension popup.
 
 ## Installation
 
@@ -54,7 +54,6 @@ For local files, open RotateFlow’s extension details and enable **Allow access
 - `R` / `Shift+R`: rotate 15° clockwise or counter-clockwise.
 - `H` / `V`: flip horizontally or vertically.
 - Arrow keys or `W/A/S/D`: pan.
-- `O`: toggle keyboard shortcuts.
 - `Backspace`: reset the selected media.
 
 Shortcuts are ignored while typing in a form field.

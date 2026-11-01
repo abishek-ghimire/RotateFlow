@@ -32,7 +32,15 @@
       <div class="control-row"><div class="control-heading"><label for="contrast">Contrast</label><output id="contrastValue" for="contrast">100%</output><button class="reset-setting" data-reset="contrast" type="button" disabled>Reset</button></div><input id="contrast" type="range" min="50" max="150" step="1" value="100" disabled><div class="value-entry"><label for="contrastInput">Type value</label><input id="contrastInput" class="number-input" type="number" min="50" max="150" step="1" value="100" disabled aria-label="Contrast percentage"><span>%</span></div></div>
     </section>
 
-    <section class="settings" aria-label="Settings"><div class="settings-heading"><label class="toggle"><input id="keyboardToggle" type="checkbox" checked><span>Keyboard shortcuts</span></label><span id="keyboardBadge" class="status-badge" aria-live="polite">ON</span></div><p id="keyboardStatus" class="hint">Enabled · Press O anytime to toggle shortcuts. R rotate, H/V flip, +/- zoom, arrows pan.</p></section>
+    <section class="settings" aria-label="Settings">
+      <div class="settings-heading">
+        <label class="toggle"><input id="extensionToggle" type="checkbox" checked><span>Enable extension</span></label>
+        <span id="extensionBadge" class="status-badge" aria-live="polite">ON</span>
+      </div>
+      <p id="extensionStatus" class="hint">Extension active · Use controls or keyboard shortcuts (R, H/V, +/- zoom, arrows pan).</p>
+    </section>
+
+    <section class="settings" aria-label="Keyboard Shortcuts Settings"><div class="settings-heading"><label class="toggle"><input id="keyboardToggle" type="checkbox" checked><span>Keyboard shortcuts</span></label><span id="keyboardBadge" class="status-badge" aria-live="polite">ON</span></div><p id="keyboardStatus" class="hint">Enabled · R rotate, H/V flip, +/- zoom, arrows pan.</p></section>
     <section class="actions"><button id="resetButton" class="secondary" type="button" disabled>Reset target</button><button id="resetAllButton" class="danger" type="button" disabled>Reset all</button></section>
     <footer><span id="qualityNote">Transformations affect display only; originals are never downloaded or re-encoded.</span><span class="credit">Made by <strong>Abishek Ghimire</strong></span></footer>
   </main>

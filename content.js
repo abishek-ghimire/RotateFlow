@@ -9,6 +9,7 @@
   let activeTargetId = null;
   let scanFrame = 0;
   let keyboardEnabled = true;
+  let extensionEnabled = true;
   let pointerDrag = null;
   let pendingVideoState = null;
   let pendingMediaState = null;
@@ -356,16 +357,16 @@
     keyboardEnabled = enabled;
     chrome.storage?.local.set({ keyboardEnabled: enabled });
     const notice = document.createElement('div');
-    notice.textContent = `RotateFlow shortcuts ${enabled ? 'enabled' : 'disabled'} · Press O to toggle`;
+    notice.textContent = `RotateFlow shortcuts ${enabled ? 'enabled' : 'disabled'}`;
     Object.assign(notice.style, { position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: '2147483647', padding: '8px 12px', borderRadius: '8px', background: enabled ? '#1d4ed8' : '#334155', color: '#fff', font: '12px system-ui, sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,.3)', pointerEvents: 'none' });
     document.documentElement.appendChild(notice);
     window.setTimeout(() => notice.remove(), 1600);
   }
 
   function handleKeydown(event) {
+    if (!extensionEnabled) return;
     if (isInput(event.target)) return;
     const key = event.key;
-    if (key.toLowerCase() === 'o') { event.preventDefault(); setKeyboardEnabled(!keyboardEnabled); return; }
     if (!keyboardEnabled) return;
     const state = resolveTarget(); if (!state) return;
     const values = {};
@@ -390,6 +391,14 @@
     scanMedia();
     if (message.type === 'ROTATEFLOW_PING') { sendResponse({ ok: true, supported: true }); return false; }
     if (message.type === 'ROTATEFLOW_SET_SETTINGS') { keyboardEnabled = message.keyboardEnabled !== false; sendResponse({ ok: true }); return false; }
+    if (message.type === 'ROTATEFLOW_SET_EXTENSION') {
+      extensionEnabled = message.extensionEnabled !== false;
+      if (!extensionEnabled) {
+        states.forEach((state) => resetState(state));
+      }
+      sendResponse({ ok: true });
+      return false;
+    }
     if (message.type === 'ROTATEFLOW_GET_STATE') { const current = resolveTarget(message.targetId); sendResponse({ ok: true, targets: getTargetSummaries(), activeTargetId: current?.id || null, state: current ? serializeState(current) : null }); return false; }
     if (message.type === 'ROTATEFLOW_SELECT_TARGET') { const state = resolveTarget(message.targetId); if (!state) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; } activeTargetId = state.id; sendResponse({ ok: true, activeTargetId, state: serializeState(state), targets: getTargetSummaries() }); return false; }
     if (message.type === 'ROTATEFLOW_APPLY') { const state = resolveTarget(message.targetId); if (!state) { sendResponse({ ok: false, error: 'No visible media was found on this page.' }); return false; } sendResponse({ ok: true, state: applyState(state, message.values || {}, message.animate !== false) }); return false; }
@@ -410,7 +419,10 @@
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => handleMessage(message, sendResponse));
-  chrome.storage?.local.get({ keyboardEnabled: true }, (settings) => { keyboardEnabled = settings.keyboardEnabled !== false; });
+  chrome.storage?.local.get({ keyboardEnabled: true, extensionEnabled: true }, (settings) => {
+    keyboardEnabled = settings.keyboardEnabled !== false;
+    extensionEnabled = settings.extensionEnabled !== false;
+  });
   window.addEventListener('keydown', handleKeydown, true);
 
   function scheduleScan() { if (scanFrame) return; scanFrame = requestAnimationFrame(() => { scanFrame = 0; scanMedia(); states.forEach(attachInteractions); }); }
